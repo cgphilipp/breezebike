@@ -23,18 +23,17 @@
 		NavUl
 	} from 'flowbite-svelte';
 
-	type Suggestion = [string, LngLatLike];
 	type InputField = {
 		input: string;
 		focused: boolean;
 		loadingSuggestion: boolean;
 		location: LngLatLike | null; // not null if cached from autocompletion / current user geo location
-		suggestions: Array<Suggestion>;
+		suggestions: Array<api.Suggestion>;
 	};
 	type AppState = 'SearchingRoute' | 'DisplayingRoute' | 'Routing';
 
 	let appState: AppState = $state('SearchingRoute');
-	let devMode = true; // enables dragging of position marker and debugging route display
+	let devMode = false; // enables dragging of position marker and debugging route display
 	let pathGeoJson: FeatureCollection | null = $state(null);
 	let turnInstructions: Array<api.TurnInstruction> = $state([]);
 	let turnDisplayString = $state('');
@@ -62,30 +61,6 @@
 
 	let loadingRoute = $state(false);
 
-	function determineCurrentWaypointId() {
-		if (currentUserLocation === undefined) {
-			return -1;
-		}
-		let minDistance = 99999999;
-		let currentWaypointId = -1;
-		for (let i = 0; i < turnInstructions.length - 1; ++i) {
-			let startPoint = turnInstructions[i].coordinate;
-			let endPoint = turnInstructions[i + 1].coordinate;
-
-			let distanceToSegment = util.coordinateToSegmentDistance(
-				currentUserLocation,
-				startPoint,
-				endPoint
-			);
-			if (distanceToSegment < minDistance) {
-				currentWaypointId = i + 1;
-				minDistance = distanceToSegment;
-			}
-		}
-		console.log(`User is navigating to waypoint ${currentWaypointId}`);
-		return currentWaypointId;
-	}
-
 	function handleUserLocationChanged(location: LngLatLike) {
 		if (appState !== 'Routing') {
 			return;
@@ -94,7 +69,7 @@
 			return;
 		}
 
-		let targetId = determineCurrentWaypointId();
+		let targetId = api.determineCurrentWaypointId(currentUserLocation, turnInstructions);
 		let currentTurnInstruction = turnInstructions[targetId];
 		let distanceMeters = util.distanceMeter(currentUserLocation, currentTurnInstruction.coordinate);
 		turnDisplayString = currentTurnInstruction.instruction + ' in ' + distanceMeters + 'm';
@@ -105,17 +80,19 @@
 		console.log(`Routing from ${fromInput.input} to ${toInput.input}...`);
 
 		if (fromInput.location === null) {
-			fromInput.location = await geocode(fromInput.input);
+			fromInput.location = await api.geocode(fromInput.input);
 		}
 		if (toInput.location === null) {
-			toInput.location = await geocode(toInput.input);
+			toInput.location = await api.geocode(toInput.input);
 		}
 
 		if (!fromInput.location) {
-			throw Error(`Could not find coords for ${fromInput.input}`);
+			alert(`Could not find coords for ${fromInput.input}`);
+			return;
 		}
 		if (!toInput.location) {
-			throw Error(`Could not find coords for ${toInput.input}`);
+			alert(`Could not find coords for ${toInput.input}`);
+			return;
 		}
 
 		console.log(`Fetched coords ${fromInput.location} -> ${toInput.location}`);
@@ -192,46 +169,11 @@
 		toInput.location = currentUserLocation;
 	}
 
-	async function querySuggestions(input: string) {
-		let geojson = await api.fetchGeocodingAPI(input, 4);
-
-		let newSuggestions = new Set<Suggestion>();
-		for (let feature of geojson.features) {
-			let coord: LngLatLike = [0, 0];
-			if (feature.geometry.type == 'Point') {
-				coord = [feature.geometry.coordinates[0], feature.geometry.coordinates[1]];
-			}
-			let properties = feature.properties;
-
-			let suggestionString = '';
-			if ('street' in properties!) {
-				suggestionString += properties.street;
-				if ('postcode' in properties!) {
-					suggestionString += ', ' + properties.postcode;
-				}
-				if ('city' in properties!) {
-					suggestionString += ' ' + properties.city;
-				}
-			} else if ('name' in properties!) {
-				suggestionString += properties.name;
-				if ('postcode' in properties!) {
-					suggestionString += ', ' + properties.postcode;
-				}
-				if ('city' in properties!) {
-					suggestionString += ' ' + properties.city;
-				}
-			}
-
-			newSuggestions.add([suggestionString, coord]);
-		}
-		return newSuggestions;
-	}
-
 	async function queryFromSuggestions() {
 		console.log(`Querying from suggestion, input: ${fromInput.input}`);
 
 		fromInput.loadingSuggestion = true;
-		let suggestions = await querySuggestions(fromInput.input);
+		let suggestions = await api.fetchSuggestions(fromInput.input);
 		fromInput.suggestions = Array.from(suggestions.values());
 		fromInput.loadingSuggestion = false;
 	}
@@ -240,12 +182,12 @@
 		console.log(`Querying to suggestion, input: ${toInput.input}`);
 
 		toInput.loadingSuggestion = true;
-		let suggestions = await querySuggestions(toInput.input);
+		let suggestions = await api.fetchSuggestions(toInput.input);
 		toInput.suggestions = Array.from(suggestions.values());
 		toInput.loadingSuggestion = false;
 	}
 
-	function applyFromSuggestion(suggestion: Suggestion) {
+	function applyFromSuggestion(suggestion: api.Suggestion) {
 		console.log(`Applying from suggestion: ${suggestion}`);
 		fromInput.input = suggestion[0];
 		fromInput.location = suggestion[1];
@@ -253,7 +195,7 @@
 		fromInput.suggestions = [];
 	}
 
-	function applyToSuggestion(suggestion: Suggestion) {
+	function applyToSuggestion(suggestion: api.Suggestion) {
 		console.log(`Applying to suggestion: ${suggestion}`);
 		toInput.input = suggestion[0];
 		toInput.location = suggestion[1];
@@ -269,18 +211,6 @@
 	function handleToFocus() {
 		toInput.focused = true;
 		fromInput.focused = false;
-	}
-
-	async function geocode(location: string): Promise<LngLatLike | null> {
-		let geojson = await api.fetchGeocodingAPI(location, 1);
-
-		for (let feature of geojson.features) {
-			if (feature.geometry.type == 'Point') {
-				return [feature.geometry.coordinates[0], feature.geometry.coordinates[1]];
-			}
-		}
-
-		return null;
 	}
 
 	let mapClasses = 'relative w-full h-full';
@@ -373,7 +303,11 @@
 
 		{#if appState === 'Routing'}
 			<div class={containerClasses}>
-				<Button color="red" onclick={() => (appState = 'SearchingRoute')}>Cancel navigation</Button>
+				<div class="flex w-full flex-col gap-1">
+					<Button color="red" onclick={() => (appState = 'SearchingRoute')}
+						>Cancel navigation</Button
+					>
+				</div>
 			</div>
 
 			<div
@@ -424,7 +358,7 @@
 			{#if currentUserLocation}
 				<DefaultMarker
 					draggable
-					ondrag={() => handleUserLocationChanged(currentUserLocation!)}
+					ondragend={() => handleUserLocationChanged(currentUserLocation!)}
 					bind:lngLat={currentUserLocation}
 				></DefaultMarker>
 			{/if}

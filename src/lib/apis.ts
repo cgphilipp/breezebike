@@ -1,3 +1,4 @@
+import * as util from '$lib/utils';
 import type { FeatureCollection } from 'geojson';
 import {
     type LngLatLike
@@ -18,6 +19,8 @@ export type Route = {
     turnInstructions: Array<TurnInstruction>;
 };
 
+export type Suggestion = [string, LngLatLike];
+
 function readTurnNavigationFromGPX(gpx: ParsedGPX): Array<TurnInstruction> {
     let result: Array<TurnInstruction> = [];
     for (let waypoint of gpx.waypoints) {
@@ -30,6 +33,77 @@ function readTurnNavigationFromGPX(gpx: ParsedGPX): Array<TurnInstruction> {
     }
     return result;
 }
+
+export async function geocode(location: string): Promise<LngLatLike | null> {
+    let geojson = await fetchGeocodingAPI(location, 1);
+
+    for (let feature of geojson.features) {
+        if (feature.geometry.type == 'Point') {
+            return [feature.geometry.coordinates[0], feature.geometry.coordinates[1]];
+        }
+    }
+
+    return null;
+}
+
+export async function fetchSuggestions(input: String) {
+    let geojson = await fetchGeocodingAPI(input, 4);
+
+    let newSuggestions = new Set<Suggestion>();
+    for (let feature of geojson.features) {
+        let coord: LngLatLike = [0, 0];
+        if (feature.geometry.type == 'Point') {
+            coord = [feature.geometry.coordinates[0], feature.geometry.coordinates[1]];
+        }
+        let properties = feature.properties;
+
+        let suggestionString = '';
+        if ('street' in properties!) {
+            suggestionString += properties.street;
+            if ('postcode' in properties!) {
+                suggestionString += ', ' + properties.postcode;
+            }
+            if ('city' in properties!) {
+                suggestionString += ' ' + properties.city;
+            }
+        } else if ('name' in properties!) {
+            suggestionString += properties.name;
+            if ('postcode' in properties!) {
+                suggestionString += ', ' + properties.postcode;
+            }
+            if ('city' in properties!) {
+                suggestionString += ' ' + properties.city;
+            }
+        }
+
+        newSuggestions.add([suggestionString, coord]);
+    }
+    return newSuggestions;
+}
+
+export function determineCurrentWaypointId(location: LngLatLike, turnInstructions: Array<TurnInstruction>) {
+    if (location === undefined) {
+        return -1;
+    }
+    let minDistance = 99999999;
+    let currentWaypointId = -1;
+    for (let i = 0; i < turnInstructions.length - 1; ++i) {
+        let startPoint = turnInstructions[i].coordinate;
+        let endPoint = turnInstructions[i + 1].coordinate;
+
+        let distanceToSegment = util.coordinateToSegmentDistance(
+            location,
+            startPoint,
+            endPoint
+        );
+        if (distanceToSegment < minDistance) {
+            currentWaypointId = i + 1;
+            minDistance = distanceToSegment;
+        }
+    }
+    return currentWaypointId;
+}
+
 
 export async function fetchRoutingAPI(from: LngLatLike, to: LngLatLike): Promise<Route> {
     let fromString = from.toString();
@@ -68,7 +142,7 @@ export async function fetchRoutingAPI(from: LngLatLike, to: LngLatLike): Promise
     };
 }
 
-export async function fetchGeocodingAPI(locationString: String, limitElements: number) {
+async function fetchGeocodingAPI(locationString: String, limitElements: number) {
     let response = await fetch(`${geocoderUrl}?q=${locationString}&limit=${limitElements}`);
     if (!response.ok) {
         throw new Error(response.statusText);
