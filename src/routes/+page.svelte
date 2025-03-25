@@ -9,30 +9,34 @@
 		type LngLatBoundsLike
 	} from 'svelte-maplibre';
 	import type { FeatureCollection, LineString } from 'geojson';
+	import { Button, Spinner, Input, Navbar, NavBrand } from 'flowbite-svelte';
 
 	type Suggestion = [string, LngLatLike];
 	type InputField = {
 		input: string;
 		focused: boolean;
 		location: LngLatLike | null; // could be cached from autocompletion
+		suggestions: Array<Suggestion>;
 	};
 
 	let pathGeoJson: FeatureCollection | null = $state(null);
 	let currentBounds: LngLatBoundsLike | undefined = $state(undefined);
-	let fromSuggestions: Array<Suggestion> = $state([]);
-	let toSuggestions: Array<Suggestion> = $state([]);
 
 	let fromInput: InputField = $state({
 		input: '',
 		focused: false,
-		location: null
+		location: null,
+		suggestions: []
 	});
 
 	let toInput: InputField = $state({
 		input: '',
 		focused: false,
-		location: null
+		location: null,
+		suggestions: []
 	});
+
+	let loading = $state(false);
 
 	const debounce = (callback: Function, wait = 300) => {
 		let timeout: ReturnType<typeof setTimeout>;
@@ -55,23 +59,26 @@
 	}
 
 	async function route() {
+		loading = true;
 		console.log(`Routing from ${fromInput.input} to ${toInput.input}...`);
 
-		let [coordFrom, coordTo] = await Promise.all([
-			geocode(fromInput.input),
-			geocode(toInput.input)
-		]);
+		if (fromInput.location === null) {
+			fromInput.location = await geocode(fromInput.input);
+		}
+		if (toInput.location === null) {
+			toInput.location = await geocode(toInput.input);
+		}
 
-		if (!coordFrom) {
+		if (!fromInput.location) {
 			throw Error(`Could not find coords for ${fromInput.input}`);
 		}
-		if (!coordTo) {
+		if (!toInput.location) {
 			throw Error(`Could not find coords for ${toInput.input}`);
 		}
 
-		console.log(`Fetched coords ${coordFrom} -> ${coordTo}`);
+		console.log(`Fetched coords ${fromInput.location} -> ${toInput.location}`);
 
-		fetchRoutingAPI(coordFrom, coordTo).then((response) => {
+		fetchRoutingAPI(fromInput.location, toInput.location).then((response) => {
 			pathGeoJson = response;
 			if (pathGeoJson.features.length > 0) {
 				let geometry = pathGeoJson.features[0].geometry;
@@ -81,6 +88,8 @@
 				let lineString = geometry as LineString;
 				currentBounds = getBoundsFromPath(lineString);
 				console.log(`Setting bounds to ${currentBounds}`);
+
+				loading = false;
 			}
 		});
 	}
@@ -123,13 +132,13 @@
 	async function queryFromSuggestions() {
 		console.log(`Querying from suggestion, input: ${fromInput.input}`);
 		let suggestions = await querySuggestions(fromInput.input);
-		fromSuggestions = Array.from(suggestions.values());
+		fromInput.suggestions = Array.from(suggestions.values());
 	}
 
 	async function queryToSuggestions() {
 		console.log(`Querying to suggestion, input: ${toInput.input}`);
 		let suggestions = await querySuggestions(toInput.input);
-		toSuggestions = Array.from(suggestions.values());
+		toInput.suggestions = Array.from(suggestions.values());
 	}
 
 	function applyFromSuggestion(suggestion: Suggestion) {
@@ -137,6 +146,7 @@
 		fromInput.input = suggestion[0];
 		fromInput.location = suggestion[1];
 		fromInput.focused = false;
+		fromInput.suggestions = [];
 	}
 
 	function applyToSuggestion(suggestion: Suggestion) {
@@ -144,6 +154,7 @@
 		toInput.input = suggestion[0];
 		toInput.location = suggestion[1];
 		toInput.focused = false;
+		toInput.suggestions = [];
 	}
 
 	function handleFromFocus() {
@@ -212,57 +223,62 @@
 </script>
 
 <div class="h-screen w-screen">
-	<div class="pointer-events-none absolute z-100">
-		<div class="bg-faded-black pointer-events-auto w-screen">
-			<h1 class="p-2 text-xl font-bold">routemybike</h1>
+	{#if loading}
+		<div
+			class="pointer-events-none absolute z-100 flex h-screen w-screen items-center justify-center"
+		>
+			<Spinner color="gray" />
 		</div>
-		<form class="bg-faded-white pointer-events-auto m-1 flex w-1/3 flex-col gap-2 rounded-lg p-2">
-			<input
-				class="input bg-faded-black"
-				type="text"
-				placeholder="From"
-				bind:value={fromInput.input}
-				onfocus={handleFromFocus}
-				onkeyup={debounce(queryFromSuggestions, 500)}
-			/>
-			<input
-				class="input bg-faded-black"
-				type="text"
-				placeholder="To"
-				bind:value={toInput.input}
-				onfocus={handleToFocus}
-				onkeyup={debounce(queryToSuggestions, 500)}
-			/>
-			<input
-				onclick={route}
-				type="submit"
-				class="btn preset-filled-primary-500"
-				value="Find Route"
-			/>
-		</form>
+	{/if}
+
+	<div class="pointer-events-none absolute z-100">
+		<Navbar class="w-screen">
+			<NavBrand href="/">
+				<h1 class="text-xl font-bold">routemybike</h1>
+			</NavBrand>
+		</Navbar>
+		<div class="bg-faded-white pointer-events-auto m-1 flex w-1/3 p-2">
+			<form class="flex w-full flex-col gap-1">
+				<Input
+					type="text"
+					placeholder="From"
+					bind:value={fromInput.input}
+					onfocus={handleFromFocus}
+					onkeyup={debounce(queryFromSuggestions, 500)}
+				/>
+				<Input
+					type="text"
+					placeholder="To"
+					bind:value={toInput.input}
+					onfocus={handleToFocus}
+					onkeyup={debounce(queryToSuggestions, 500)}
+				/>
+				<Input onclick={route} type="submit" value="Find Route" />
+			</form>
+		</div>
 
 		<div
-			class="bg-faded-black pointer-events-auto m-1 flex w-1/3 flex-col gap-2 rounded-lg p-2"
+			class="bg-faded-white pointer-events-auto m-1 flex w-1/3 flex-col gap-1 p-2"
 			class:hidden={!fromInput.focused}
 		>
-			<div>Use current location</div>
-			<div>Choose on map</div>
-			{#each fromSuggestions as fromSuggestion}
-				<button class="text-left" type="button" onclick={() => applyFromSuggestion(fromSuggestion)}
-					>{fromSuggestion[0]}</button
+			<Button class="w-full">Use current location</Button>
+			<Button class="w-full">Choose on map</Button>
+			{#each fromInput.suggestions as fromSuggestion}
+				<Button class="w-full" onclick={() => applyFromSuggestion(fromSuggestion)}
+					>{fromSuggestion[0]}</Button
 				>
 			{/each}
 		</div>
 
 		<div
-			class="bg-faded-black pointer-events-auto m-1 flex w-1/3 flex-col gap-2 rounded-lg p-2"
+			class="bg-faded-white pointer-events-auto m-1 flex w-1/3 flex-col gap-1 p-2"
 			class:hidden={!toInput.focused}
 		>
-			<div>Use current location</div>
-			<div>Choose on map</div>
-			{#each toSuggestions as toSuggestion}
-				<button class="text-left" type="button" onclick={() => applyToSuggestion(toSuggestion)}
-					>{toSuggestion[0]}</button
+			<Button class="w-full">Use current location</Button>
+			<Button class="w-full">Choose on map</Button>
+			{#each toInput.suggestions as toSuggestion}
+				<Button class="w-full" onclick={() => applyToSuggestion(toSuggestion)}
+					>{toSuggestion[0]}</Button
 				>
 			{/each}
 		</div>
@@ -272,6 +288,7 @@
 		style="/style.json"
 		class={mapClasses}
 		standardControls="bottom-right"
+		pitchWithRotate={false}
 		bounds={currentBounds}
 	>
 		<RasterTileSource tiles={[tileUrl]} tileSize={256}>
