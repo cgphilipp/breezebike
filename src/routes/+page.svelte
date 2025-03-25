@@ -1,4 +1,6 @@
 <script lang="ts">
+	import * as api from '$lib/apis';
+	import * as util from '$lib/utils';
 	import {
 		MapLibre,
 		RasterTileSource,
@@ -9,12 +11,22 @@
 		type LngLatBoundsLike
 	} from 'svelte-maplibre';
 	import type { FeatureCollection, LineString } from 'geojson';
-	import { Button, Spinner, Input, Navbar, NavBrand } from 'flowbite-svelte';
+	import {
+		Button,
+		Spinner,
+		Input,
+		Navbar,
+		NavBrand,
+		NavHamburger,
+		NavLi,
+		NavUl
+	} from 'flowbite-svelte';
 
 	type Suggestion = [string, LngLatLike];
 	type InputField = {
 		input: string;
 		focused: boolean;
+		loadingSuggestion: boolean;
 		location: LngLatLike | null; // could be cached from autocompletion
 		suggestions: Array<Suggestion>;
 	};
@@ -25,6 +37,7 @@
 	let fromInput: InputField = $state({
 		input: '',
 		focused: false,
+		loadingSuggestion: false,
 		location: null,
 		suggestions: []
 	});
@@ -32,34 +45,19 @@
 	let toInput: InputField = $state({
 		input: '',
 		focused: false,
+		loadingSuggestion: false,
 		location: null,
 		suggestions: []
 	});
 
-	let loading = $state(false);
+	let loadingRoute = $state(false);
 
-	const debounce = (callback: Function, wait = 300) => {
-		let timeout: ReturnType<typeof setTimeout>;
-
-		return (...args: any[]) => {
-			clearTimeout(timeout);
-			timeout = setTimeout(() => callback(...args), wait);
-		};
-	};
-
-	function getBoundsFromPath(path: LineString) {
-		let result: LngLatBoundsLike = [9999, 9999, -9999, -9999];
-		for (let point of path.coordinates) {
-			result[0] = Math.min(result[0], point[0]);
-			result[1] = Math.min(result[1], point[1]);
-			result[2] = Math.max(result[2], point[0]);
-			result[3] = Math.max(result[3], point[1]);
-		}
-		return result;
+	function calculateNavigationFromGeoJson(geojson: any) {
+		console.log(geojson);
 	}
 
 	async function route() {
-		loading = true;
+		loadingRoute = true;
 		console.log(`Routing from ${fromInput.input} to ${toInput.input}...`);
 
 		if (fromInput.location === null) {
@@ -78,24 +76,25 @@
 
 		console.log(`Fetched coords ${fromInput.location} -> ${toInput.location}`);
 
-		fetchRoutingAPI(fromInput.location, toInput.location).then((response) => {
+		api.fetchRoutingAPI(fromInput.location, toInput.location).then((response) => {
 			pathGeoJson = response;
+			let navigationInstrutions = calculateNavigationFromGeoJson(pathGeoJson);
 			if (pathGeoJson.features.length > 0) {
 				let geometry = pathGeoJson.features[0].geometry;
 				if (geometry.type !== 'LineString') {
 					return;
 				}
 				let lineString = geometry as LineString;
-				currentBounds = getBoundsFromPath(lineString);
+				currentBounds = util.getBoundsFromPath(lineString);
 				console.log(`Setting bounds to ${currentBounds}`);
 
-				loading = false;
+				loadingRoute = false;
 			}
 		});
 	}
 
 	async function querySuggestions(input: string) {
-		let geojson = await fetchGeocodingAPI(input, 4);
+		let geojson = await api.fetchGeocodingAPI(input, 4);
 
 		let newSuggestions = new Set<Suggestion>();
 		for (let feature of geojson.features) {
@@ -131,14 +130,20 @@
 
 	async function queryFromSuggestions() {
 		console.log(`Querying from suggestion, input: ${fromInput.input}`);
+
+		fromInput.loadingSuggestion = true;
 		let suggestions = await querySuggestions(fromInput.input);
 		fromInput.suggestions = Array.from(suggestions.values());
+		fromInput.loadingSuggestion = false;
 	}
 
 	async function queryToSuggestions() {
 		console.log(`Querying to suggestion, input: ${toInput.input}`);
+
+		toInput.loadingSuggestion = true;
 		let suggestions = await querySuggestions(toInput.input);
 		toInput.suggestions = Array.from(suggestions.values());
+		toInput.loadingSuggestion = false;
 	}
 
 	function applyFromSuggestion(suggestion: Suggestion) {
@@ -168,7 +173,7 @@
 	}
 
 	async function geocode(location: string): Promise<LngLatLike | null> {
-		let geojson = await fetchGeocodingAPI(location, 1);
+		let geojson = await api.fetchGeocodingAPI(location, 1);
 
 		for (let feature of geojson.features) {
 			if (feature.geometry.type == 'Point') {
@@ -179,51 +184,12 @@
 		return null;
 	}
 
-	async function fetchRoutingAPI(from: LngLatLike, to: LngLatLike) {
-		let fromString = from.toString();
-		let toString = to.toString();
-
-		let staticRouteProperties =
-			'&profile=Fastbike-lowtraffic-tertiaries&alternativeidx=0&format=geojson';
-		let response =
-			await fetch(`${routeUrl}?lonlats=${fromString}|${toString}${staticRouteProperties}
-`);
-		if (!response.ok) {
-			throw new Error(response.statusText);
-		}
-
-		let geojson = (await response.json()) as unknown as FeatureCollection;
-		if (!geojson) {
-			throw new Error('Could not convert router response to FeatureCollection');
-		}
-
-		return geojson;
-	}
-
-	async function fetchGeocodingAPI(locationString: String, limitElements: number) {
-		let response = await fetch(`${geocoderUrl}?q=${locationString}&limit=${limitElements}`);
-		if (!response.ok) {
-			throw new Error(response.statusText);
-		}
-
-		let geojson = (await response.json()) as unknown as FeatureCollection;
-		if (!geojson) {
-			throw new Error('Could not convert router response to FeatureCollection');
-		}
-
-		return geojson;
-	}
-
 	let mapClasses = 'relative w-full h-full';
 	let borderColor = $state('#0000ffaa');
-
-	let tileUrl = $state('https://tile.openstreetmap.org/{z}/{x}/{y}.png');
-	let routeUrl = $state('https://bikerouter.de/brouter-engine/brouter');
-	let geocoderUrl = $state('https://photon.komoot.io/api/');
 </script>
 
 <div class="h-screen w-screen">
-	{#if loading}
+	{#if loadingRoute}
 		<div
 			class="pointer-events-none absolute z-100 flex h-screen w-screen items-center justify-center"
 		>
@@ -234,9 +200,18 @@
 	<div class="pointer-events-none absolute z-100">
 		<Navbar class="w-screen">
 			<NavBrand href="/">
-				<h1 class="text-xl font-bold">routemybike</h1>
+				<h1 class="me-3 h-6 text-xl font-bold sm:h-9">routemybike</h1>
 			</NavBrand>
+			<!-- <NavHamburger /> -->
+			<!-- <NavUl>
+			<NavLi href="/">Home</NavLi>
+			<NavLi href="/about">About</NavLi>
+			<NavLi href="/docs/components/navbar">Navbar</NavLi>
+			<NavLi href="/pricing">Pricing</NavLi>
+			<NavLi href="/contact">Contact</NavLi>
+		</NavUl> -->
 		</Navbar>
+
 		<div class="bg-faded-white pointer-events-auto m-1 flex w-1/3 p-2">
 			<form class="flex w-full flex-col gap-1">
 				<Input
@@ -244,14 +219,14 @@
 					placeholder="From"
 					bind:value={fromInput.input}
 					onfocus={handleFromFocus}
-					onkeyup={debounce(queryFromSuggestions, 500)}
+					onkeyup={util.debounce(queryFromSuggestions, 500)}
 				/>
 				<Input
 					type="text"
 					placeholder="To"
 					bind:value={toInput.input}
 					onfocus={handleToFocus}
-					onkeyup={debounce(queryToSuggestions, 500)}
+					onkeyup={util.debounce(queryToSuggestions, 500)}
 				/>
 				<Input onclick={route} type="submit" value="Find Route" />
 			</form>
@@ -291,7 +266,7 @@
 		pitchWithRotate={false}
 		bounds={currentBounds}
 	>
-		<RasterTileSource tiles={[tileUrl]} tileSize={256}>
+		<RasterTileSource tiles={[api.tileUrl]} tileSize={256}>
 			<RasterLayer
 				paint={{
 					'raster-opacity': 1.0
