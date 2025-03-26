@@ -17,7 +17,7 @@ export const debounce = (callback: Function, wait = 300) => {
 };
 
 export function getBoundsFromPath(path: LineString) {
-	const result: LngLatBoundsLike = [9999, 9999, -9999, -9999];
+	const result: LngLatBoundsLike = [Number.MAX_VALUE, Number.MAX_VALUE, Number.MIN_VALUE, Number.MIN_VALUE];
 	for (const point of path.coordinates) {
 		result[0] = Math.min(result[0], point[0]);
 		result[1] = Math.min(result[1], point[1]);
@@ -43,6 +43,28 @@ export function distanceMeter(pointA: LngLatLike, PointB: LngLatLike) {
 	const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 	const d = R * c;
 	return Math.round(d * 1000); // meters
+}
+
+export function calculateBearing(pointA: LngLatLike, PointB: LngLatLike) {
+	const pA = LngLat.convert(pointA);
+	const pB = LngLat.convert(PointB);
+
+	const toRadians = (deg: number) => (deg * Math.PI) / 180;
+	const toDegrees = (rad: number) => (rad * 180) / Math.PI;
+
+	// Convert coordinates to radians
+	const phi1 = toRadians(pA.lat);
+	const phi2 = toRadians(pB.lat);
+	const deltaLng = toRadians(pB.lng - pA.lng);
+
+	// Calculate bearing
+	const y = Math.sin(deltaLng) * Math.cos(phi2);
+	const x = Math.cos(phi1) * Math.sin(phi2) -
+		Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLng);
+
+	let radians = Math.atan2(y, x);
+	radians = toDegrees(radians);
+	return (radians + 360) % 360; // normalize to 0-360 degrees
 }
 
 function pointToSegmentDistanceSquared(

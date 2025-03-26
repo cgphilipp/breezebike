@@ -1,33 +1,13 @@
-# sv
-
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
-
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
-
-```bash
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
+# breezebike
 
 ## Developing
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
 ```bash
+npm install
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
 ## Building
-
-To create a production version of your app:
 
 ```bash
 npm run build
@@ -35,4 +15,31 @@ npm run build
 
 You can preview the production build with `npm run preview`.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+## Deployment
+
+```bash
+npm run build && tar cfz build.tar.gz build  && scp build.tar.gz cgphilipp.de:/home/philipp
+```
+
+On the server, extract the archive and run:
+```bash
+PORT={your port} node build
+```
+
+## Routing backends
+
+There is a comparison of different open-source routing projects at https://wiki.openstreetmap.org/wiki/Routing/online_routers.
+breezebike currently uses Brouter, in the future I want to test OpenRouteService as well.
+
+## Todo
+
+- always focus user if position available
+- display stats for the fetched route (distance, time, elevation)
+- make the brouter profile changeable 
+  - simple: let user choose between "relaxed", "trekking", "road bike"
+  - advanced: within a settings modal
+- offer multiple alternative routes
+- improvements on auto complete
+  - use photons API for biasing towards user location (may need to query location on app start)
+- create modal for attributions (brouter, photon)
+- let user add stops on the way (brouter already supports it)

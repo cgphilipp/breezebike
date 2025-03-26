@@ -2,15 +2,7 @@
 	import * as api from '$lib/apis';
 	import * as util from '$lib/utils';
 	import { type LngLatLike, type LngLatBoundsLike } from 'maplibre-gl';
-	import {
-		MapLibre,
-		RasterTileSource,
-		RasterLayer,
-		GeoJSON,
-		LineLayer,
-		DefaultMarker,
-		Popup
-	} from 'svelte-maplibre';
+	import { MapLibre, GeoJSON, LineLayer, Marker } from 'svelte-maplibre';
 	import type { FeatureCollection, LineString } from 'geojson';
 	import { Button, Spinner, Input, Navbar, NavBrand } from 'flowbite-svelte';
 
@@ -21,10 +13,33 @@
 		location: LngLatLike | null; // not null if cached from autocompletion / current user geo location
 		suggestions: Array<api.Suggestion>;
 	};
-	type AppState = 'SearchingRoute' | 'DisplayingRoute' | 'Routing';
+	type CameraState = {
+		center: LngLatLike;
+		zoom: number;
+		bearing: number;
+		pitch: number;
+	};
+	let cameraState: CameraState = $state({
+		center: [10.840601938197864, 49.971698275409054],
+		zoom: 5,
+		bearing: 0,
+		pitch: 0
+	});
 
+	type AppState = 'SearchingRoute' | 'DisplayingRoute' | 'Routing' | 'FinishedRouting';
 	let appState: AppState = $state('SearchingRoute');
-	let devMode = false; // enables dragging of position marker and debugging route display
+
+	let colors = {
+		primary: '#F34213',
+		primaryLight: '#E0CA3C',
+		secondary: '#3E2F5B',
+		green: '#136F63',
+		black: '#000F08',
+		offwhite: '#EEEEEE'
+	};
+	const NAVIGATION_ZOOM = 17;
+
+	let devMode = true; // enables dragging of position marker and debugging route display
 	let pathGeoJson: FeatureCollection | null = $state(null);
 	let turnInstructions: Array<api.TurnInstruction> = $state([]);
 	let turnDisplayString = $state('');
@@ -61,6 +76,22 @@
 		let currentTurnInstruction = turnInstructions[targetId];
 		let distanceMeters = util.distanceMeter(location, currentTurnInstruction.coordinate);
 		turnDisplayString = currentTurnInstruction.instruction + ' in ' + distanceMeters + 'm';
+
+		if (targetId > 0) {
+			let lastTurnInstruction = turnInstructions[targetId - 1];
+			cameraState.bearing = util.calculateBearing(
+				lastTurnInstruction.coordinate,
+				currentTurnInstruction.coordinate
+			);
+		}
+
+		// todo: provide ability to go into "custom" camera mode while navigating
+		cameraState.center = location;
+
+		// hacky :)
+		if (currentTurnInstruction.instruction === 'Destination' && distanceMeters < 10) {
+			finishRouting();
+		}
 	}
 
 	async function calculateRoute() {
@@ -116,11 +147,16 @@
 			};
 			gpsWatchId = navigator.geolocation.watchPosition(
 				(position: GeolocationPosition) => {
+					if (devMode && currentUserLocation !== undefined) {
+						return;
+					}
+
 					currentUserLocation = [position.coords.longitude, position.coords.latitude];
 					if (position.coords.heading !== null) {
 						currentUserBearing = position.coords.heading;
 					}
 
+					// in dev mode, let's ignore the GPS to allow us to drag for simulation
 					handleUserLocationChanged(currentUserLocation);
 				},
 				null,
@@ -133,6 +169,17 @@
 		setupGeolocationWatch();
 
 		appState = 'Routing';
+		if (currentUserLocation !== undefined) {
+			cameraState.center = currentUserLocation;
+		}
+		cameraState.zoom = NAVIGATION_ZOOM;
+		cameraState.pitch = 30;
+	}
+
+	function finishRouting() {
+		appState = 'FinishedRouting';
+		turnInstructions = [];
+		pathGeoJson = null;
 	}
 
 	function queryFromGeoposition() {
@@ -202,8 +249,9 @@
 	}
 
 	let mapClasses = 'relative w-full h-full';
-	let containerClasses = 'bg-faded-white pointer-events-auto m-1 flex w-1/3 p-2 rounded-lg';
-	let borderColor = $state('#0000ffaa');
+	let mainContainerWidth = 'min-w-sm max-w-1/3';
+	let mainContainerClasses =
+		mainContainerWidth + ' bg-faded-white pointer-events-auto m-1 flex p-2 rounded-lg';
 </script>
 
 <div class="h-screen w-screen">
@@ -216,9 +264,32 @@
 	{/if}
 
 	<div class="pointer-events-none absolute z-100 h-screen w-screen">
-		<Navbar class="w-screen">
+		<Navbar class="bg-secondary text-offwhite pointer-events-auto w-screen">
 			<NavBrand href="/">
-				<h1 class="me-3 h-6 text-xl font-bold sm:h-9">routemybike</h1>
+				<div class="flex gap-2">
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="1.8em"
+						height="1.8em"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						class="icon icon-tabler icons-tabler-filled icon-tabler-bike"
+					>
+						<path stroke="none" d="M0 0h24v24H0z" fill="none" /><path
+							d="M5 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"
+						/><path d="M19 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path
+							d="M12 19l0 -4l-3 -3l5 -4l2 3l3 0"
+						/><path d="M17 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+					</svg>
+					<div class="flex">
+						<h1 class="text-xl font-bold">breezebike</h1>
+						<div class="text-xs">beta</div>
+					</div>
+				</div>
 			</NavBrand>
 			<!-- <NavHamburger /> -->
 			<!-- <NavUl>
@@ -231,105 +302,134 @@
 		</Navbar>
 
 		{#if appState === 'SearchingRoute'}
-			<div class={containerClasses}>
+			<div class={mainContainerClasses}>
 				<form class="flex w-full flex-col gap-1">
+					<div class="flex flex-row gap-1">
+						<Input
+							type="text"
+							placeholder="From"
+							bind:value={fromInput.input}
+							onfocus={handleFromFocus}
+							onkeyup={util.debounce(queryFromSuggestions, 500)}
+						/>
+						<Button onclick={queryFromGeoposition} class="bg-secondary text-offwhite w-1/8"
+							>GPS</Button
+						>
+					</div>
+
+					<div class="flex flex-row gap-1">
+						<Input
+							type="text"
+							placeholder="To"
+							bind:value={toInput.input}
+							onfocus={handleToFocus}
+							onkeyup={util.debounce(queryToSuggestions, 500)}
+						/>
+						<Button onclick={queryToGeoposition} class="bg-secondary text-offwhite w-1/8"
+							>GPS</Button
+						>
+					</div>
+
 					<Input
-						type="text"
-						placeholder="From"
-						bind:value={fromInput.input}
-						onfocus={handleFromFocus}
-						onkeyup={util.debounce(queryFromSuggestions, 500)}
+						class="bg-primary text-offwhite"
+						onclick={calculateRoute}
+						type="submit"
+						value="Find Route"
 					/>
-					<Input
-						type="text"
-						placeholder="To"
-						bind:value={toInput.input}
-						onfocus={handleToFocus}
-						onkeyup={util.debounce(queryToSuggestions, 500)}
-					/>
-					<Input onclick={calculateRoute} type="submit" value="Find Route" />
 				</form>
 			</div>
 
-			<div
-				class="bg-faded-white pointer-events-auto m-1 flex w-1/3 flex-col gap-1 p-2"
-				class:hidden={!fromInput.focused}
-			>
-				<Button class="w-full" onclick={queryFromGeoposition}>Use current location</Button>
-				<!-- <Button class="w-full">Choose on map</Button> -->
-				{#each fromInput.suggestions as fromSuggestion (fromSuggestion[1])}
-					<Button class="w-full" onclick={() => applyFromSuggestion(fromSuggestion)}
-						>{fromSuggestion[0]}</Button
-					>
-				{/each}
-			</div>
+			{#if fromInput.suggestions.length > 0}
+				<div
+					class={'bg-faded-white pointer-events-auto m-1 flex flex-col gap-1 p-2 ' +
+						mainContainerWidth}
+					class:hidden={!fromInput.focused}
+				>
+					<!-- <Button class="w-full">Choose on map</Button> -->
 
-			<div
-				class="bg-faded-white pointer-events-auto m-1 flex w-1/3 flex-col gap-1 p-2"
-				class:hidden={!toInput.focused}
-			>
-				<Button class="w-full" onclick={queryToGeoposition}>Use current location</Button>
-				<!-- <Button class="w-full">Choose on map</Button> -->
-				{#each toInput.suggestions as toSuggestion (toSuggestion[1])}
-					<Button class="w-full" onclick={() => applyToSuggestion(toSuggestion)}
-						>{toSuggestion[0]}</Button
-					>
-				{/each}
-			</div>
+					{#each fromInput.suggestions as fromSuggestion (fromSuggestion[1])}
+						<Button
+							class="text-offblack border-offblackalpha w-full border bg-white"
+							onclick={() => applyFromSuggestion(fromSuggestion)}>{fromSuggestion[0]}</Button
+						>
+					{/each}
+				</div>
+			{/if}
+
+			{#if toInput.suggestions.length > 0}
+				<div
+					class={'bg-faded-white pointer-events-auto m-1 flex flex-col gap-1 p-2 ' +
+						mainContainerWidth}
+					class:hidden={!toInput.focused}
+				>
+					<!-- <Button class="w-full">Choose on map</Button> -->
+					{#each toInput.suggestions as toSuggestion (toSuggestion[1])}
+						<Button
+							class="text-offblack border-offblackalpha w-full border bg-white"
+							onclick={() => applyToSuggestion(toSuggestion)}>{toSuggestion[0]}</Button
+						>
+					{/each}
+				</div>
+			{/if}
 		{/if}
 
 		{#if appState === 'DisplayingRoute'}
-			<div class={containerClasses}>
+			<div class={mainContainerClasses}>
 				<div class="flex w-full flex-col gap-1">
-					<Button color="red" onclick={() => (appState = 'SearchingRoute')}>Back</Button>
-					<Button color="green" onclick={startRouting}>Start navigation</Button>
+					<Button class="bg-primary" onclick={() => (appState = 'SearchingRoute')}>Back</Button>
+					<Button class="bg-themegreen" onclick={startRouting}>Start navigation</Button>
 				</div>
 			</div>
 
-			<div class={containerClasses + ' absolute bottom-1'}>Stats coming soon!</div>
+			<div class={mainContainerClasses + ' absolute bottom-1'}>Stats coming soon!</div>
 		{/if}
 
 		{#if appState === 'Routing'}
-			<div class={containerClasses}>
+			<div class={mainContainerClasses}>
 				<div class="flex w-full flex-col gap-1">
-					<Button color="red" onclick={() => (appState = 'SearchingRoute')}
+					<Button class="bg-primary" onclick={() => (appState = 'SearchingRoute')}
 						>Cancel navigation</Button
 					>
 				</div>
 			</div>
 
 			<div
-				class={containerClasses +
+				class={mainContainerClasses +
 					' absolute top-20 right-1 h-1/8 w-1/3 items-center justify-center text-xl'}
 			>
 				{turnDisplayString}
 			</div>
 		{/if}
+
+		{#if appState === 'FinishedRouting'}
+			<div class={mainContainerClasses}>
+				<div class="flex w-full flex-col gap-1">
+					<Button class="bg-primary" onclick={() => (appState = 'SearchingRoute')}
+						>Start new navigation</Button
+					>
+					<div class="m-5 text-center text-xl">You arrived at your destination!</div>
+				</div>
+			</div>
+		{/if}
 	</div>
 
 	<MapLibre
-		style="/style.json"
+		style="/styles/versatiles.json"
 		class={mapClasses}
 		standardControls="bottom-right"
-		zoom={appState === 'Routing' ? 16 : 1}
-		center={appState === 'Routing' ? currentUserLocation : [0, 0]}
-		bearing={appState === 'Routing' ? currentUserBearing : 0}
+		center={cameraState.center}
+		zoom={cameraState.zoom}
+		bearing={cameraState.bearing}
+		pitch={cameraState.pitch}
 		pitchWithRotate={false}
 		bounds={currentBounds}
+		maxZoom={NAVIGATION_ZOOM}
 	>
-		<RasterTileSource tiles={[api.tileUrl]} tileSize={256}>
-			<RasterLayer
-				paint={{
-					'raster-opacity': 1.0
-				}}
-			/>
-		</RasterTileSource>
-
 		{#if pathGeoJson}
 			<GeoJSON data={pathGeoJson!}>
 				<LineLayer
 					layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-					paint={{ 'line-color': borderColor, 'line-width': 3 }}
+					paint={{ 'line-color': colors.primary, 'line-width': 3 }}
 					beforeLayerType="symbol"
 				/>
 			</GeoJSON>
@@ -337,27 +437,48 @@
 
 		{#if !devMode}
 			{#if currentUserLocation}
-				<DefaultMarker lngLat={currentUserLocation}></DefaultMarker>
+				<Marker lngLat={currentUserLocation} rotation={currentUserBearing} class="h-8 w-8">
+					<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+						<polygon points="50,15 80,80 50,65 20,80" fill={colors.secondary} />
+					</svg>
+				</Marker>
 			{/if}
 		{/if}
 
-		<!-- display draggable user marker and additional instruction markers -->
+		<!-- display draggable user marker -->
 		{#if devMode}
 			{#if currentUserLocation}
-				<DefaultMarker
+				<Marker
 					draggable
-					ondragend={() => handleUserLocationChanged(currentUserLocation!)}
 					bind:lngLat={currentUserLocation}
-				></DefaultMarker>
+					rotation={currentUserBearing}
+					ondragend={() => handleUserLocationChanged(currentUserLocation!)}
+					class="h-8 w-8"
+				>
+					<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+						<polygon points="50,15 80,80 50,65 20,80" fill={colors.secondary} />
+					</svg>
+				</Marker>
 			{/if}
-
-			{#each turnInstructions as instruction (instruction.coordinate)}
-				<DefaultMarker lngLat={instruction.coordinate}>
-					<Popup offset={[0, -10]}>
-						<div class="z-100 text-lg font-bold">{instruction.instruction}</div>
-					</Popup>
-				</DefaultMarker>
-			{/each}
 		{/if}
+
+		{#each turnInstructions as instruction (instruction.coordinate)}
+			<Marker lngLat={instruction.coordinate} class="h-4 w-4">
+				<svg
+					fill={colors.primary}
+					aria-hidden="true"
+					xmlns="http://www.w3.org/2000/svg"
+					width="100%"
+					height="100%"
+					viewBox="0 0 24 24"
+				>
+					<path
+						fill-rule="evenodd"
+						d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12Zm9.408-5.5a1 1 0 1 0 0 2h.01a1 1 0 1 0 0-2h-.01ZM10 10a1 1 0 1 0 0 2h1v3h-1a1 1 0 1 0 0 2h4a1 1 0 1 0 0-2h-1v-4a1 1 0 0 0-1-1h-2Z"
+						clip-rule="evenodd"
+					/>
+				</svg>
+			</Marker>
+		{/each}
 	</MapLibre>
 </div>

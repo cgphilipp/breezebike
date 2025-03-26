@@ -3,7 +3,8 @@ import type { FeatureCollection } from 'geojson';
 import { type LngLatLike } from 'svelte-maplibre';
 import { ParsedGPX, parseGPX } from '@we-gold/gpxjs';
 
-export const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+// export const tileUrl = 'https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}';
+// export const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const routeUrl = 'https://bikerouter.de/brouter-engine/brouter';
 const geocoderUrl = 'https://photon.komoot.io/api/';
 
@@ -45,7 +46,7 @@ export async function geocode(location: string): Promise<LngLatLike | null> {
 }
 
 export async function fetchSuggestions(input: string) {
-	const geojson = await fetchGeocodingAPI(input, 4);
+	const geojson = await fetchGeocodingAPI(input, 5);
 
 	const newSuggestions = new Set<Suggestion>();
 	for (const feature of geojson.features) {
@@ -54,24 +55,28 @@ export async function fetchSuggestions(input: string) {
 			coord = [feature.geometry.coordinates[0], feature.geometry.coordinates[1]];
 		}
 		const properties = feature.properties;
+		if (properties === null) {
+			continue;
+		}
+		const hasStreet = 'street' in properties;
+		const hasName = 'name' in properties;
 
 		let suggestionString = '';
-		if ('street' in properties!) {
-			suggestionString += properties.street;
-			if ('postcode' in properties!) {
-				suggestionString += ', ' + properties.postcode;
-			}
-			if ('city' in properties!) {
-				suggestionString += ' ' + properties.city;
-			}
-		} else if ('name' in properties!) {
-			suggestionString += properties.name;
-			if ('postcode' in properties!) {
-				suggestionString += ', ' + properties.postcode;
-			}
-			if ('city' in properties!) {
-				suggestionString += ' ' + properties.city;
-			}
+		if (hasStreet && hasName) {
+			suggestionString += `${properties.name}, ${properties.street}`;
+		}
+		else if (hasName) {
+			suggestionString += `${properties.name}`;
+		}
+		else if (hasStreet) {
+			suggestionString += `${properties.street}`;
+		}
+
+		if ('postcode' in properties!) {
+			suggestionString += ', ' + properties.postcode;
+		}
+		if ('city' in properties) {
+			suggestionString += ' ' + properties.city;
 		}
 
 		newSuggestions.add([suggestionString, coord]);
@@ -83,10 +88,7 @@ export function determineCurrentWaypointId(
 	location: LngLatLike,
 	turnInstructions: Array<TurnInstruction>
 ) {
-	if (location === undefined) {
-		return -1;
-	}
-	let minDistance = 99999999;
+	let minDistance = Number.MAX_VALUE;
 	let currentWaypointId = -1;
 	for (let i = 0; i < turnInstructions.length - 1; ++i) {
 		const startPoint = turnInstructions[i].coordinate;
