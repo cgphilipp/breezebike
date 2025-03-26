@@ -12,16 +12,7 @@
 		Popup
 	} from 'svelte-maplibre';
 	import type { FeatureCollection, LineString } from 'geojson';
-	import {
-		Button,
-		Spinner,
-		Input,
-		Navbar,
-		NavBrand,
-		NavHamburger,
-		NavLi,
-		NavUl
-	} from 'flowbite-svelte';
+	import { Button, Spinner, Input, Navbar, NavBrand } from 'flowbite-svelte';
 
 	type InputField = {
 		input: string;
@@ -65,13 +56,10 @@
 		if (appState !== 'Routing') {
 			return;
 		}
-		if (currentUserLocation === undefined) {
-			return;
-		}
 
-		let targetId = api.determineCurrentWaypointId(currentUserLocation, turnInstructions);
+		let targetId = api.determineCurrentWaypointId(location, turnInstructions);
 		let currentTurnInstruction = turnInstructions[targetId];
-		let distanceMeters = util.distanceMeter(currentUserLocation, currentTurnInstruction.coordinate);
+		let distanceMeters = util.distanceMeter(location, currentTurnInstruction.coordinate);
 		turnDisplayString = currentTurnInstruction.instruction + ' in ' + distanceMeters + 'm';
 	}
 
@@ -269,7 +257,7 @@
 			>
 				<Button class="w-full" onclick={queryFromGeoposition}>Use current location</Button>
 				<!-- <Button class="w-full">Choose on map</Button> -->
-				{#each fromInput.suggestions as fromSuggestion}
+				{#each fromInput.suggestions as fromSuggestion (fromSuggestion[1])}
 					<Button class="w-full" onclick={() => applyFromSuggestion(fromSuggestion)}
 						>{fromSuggestion[0]}</Button
 					>
@@ -282,7 +270,7 @@
 			>
 				<Button class="w-full" onclick={queryToGeoposition}>Use current location</Button>
 				<!-- <Button class="w-full">Choose on map</Button> -->
-				{#each toInput.suggestions as toSuggestion}
+				{#each toInput.suggestions as toSuggestion (toSuggestion[1])}
 					<Button class="w-full" onclick={() => applyToSuggestion(toSuggestion)}
 						>{toSuggestion[0]}</Button
 					>
@@ -363,7 +351,7 @@
 				></DefaultMarker>
 			{/if}
 
-			{#each turnInstructions as instruction}
+			{#each turnInstructions as instruction (instruction.coordinate)}
 				<DefaultMarker lngLat={instruction.coordinate}>
 					<Popup offset={[0, -10]}>
 						<div class="z-100 text-lg font-bold">{instruction.instruction}</div>

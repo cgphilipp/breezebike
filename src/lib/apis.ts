@@ -3,9 +3,9 @@ import type { FeatureCollection } from 'geojson';
 import { type LngLatLike } from 'svelte-maplibre';
 import { ParsedGPX, parseGPX } from '@we-gold/gpxjs';
 
-export let tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-let routeUrl = 'https://bikerouter.de/brouter-engine/brouter';
-let geocoderUrl = 'https://photon.komoot.io/api/';
+export const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const routeUrl = 'https://bikerouter.de/brouter-engine/brouter';
+const geocoderUrl = 'https://photon.komoot.io/api/';
 
 export type TurnInstruction = {
 	coordinate: LngLatLike;
@@ -20,8 +20,8 @@ export type Route = {
 export type Suggestion = [string, LngLatLike];
 
 function readTurnNavigationFromGPX(gpx: ParsedGPX): Array<TurnInstruction> {
-	let result: Array<TurnInstruction> = [];
-	for (let waypoint of gpx.waypoints) {
+	const result: Array<TurnInstruction> = [];
+	for (const waypoint of gpx.waypoints) {
 		if ('name' in waypoint) {
 			result.push({
 				instruction: waypoint.name!,
@@ -33,9 +33,9 @@ function readTurnNavigationFromGPX(gpx: ParsedGPX): Array<TurnInstruction> {
 }
 
 export async function geocode(location: string): Promise<LngLatLike | null> {
-	let geojson = await fetchGeocodingAPI(location, 1);
+	const geojson = await fetchGeocodingAPI(location, 1);
 
-	for (let feature of geojson.features) {
+	for (const feature of geojson.features) {
 		if (feature.geometry.type == 'Point') {
 			return [feature.geometry.coordinates[0], feature.geometry.coordinates[1]];
 		}
@@ -44,16 +44,16 @@ export async function geocode(location: string): Promise<LngLatLike | null> {
 	return null;
 }
 
-export async function fetchSuggestions(input: String) {
-	let geojson = await fetchGeocodingAPI(input, 4);
+export async function fetchSuggestions(input: string) {
+	const geojson = await fetchGeocodingAPI(input, 4);
 
-	let newSuggestions = new Set<Suggestion>();
-	for (let feature of geojson.features) {
+	const newSuggestions = new Set<Suggestion>();
+	for (const feature of geojson.features) {
 		let coord: LngLatLike = [0, 0];
 		if (feature.geometry.type == 'Point') {
 			coord = [feature.geometry.coordinates[0], feature.geometry.coordinates[1]];
 		}
-		let properties = feature.properties;
+		const properties = feature.properties;
 
 		let suggestionString = '';
 		if ('street' in properties!) {
@@ -89,10 +89,10 @@ export function determineCurrentWaypointId(
 	let minDistance = 99999999;
 	let currentWaypointId = -1;
 	for (let i = 0; i < turnInstructions.length - 1; ++i) {
-		let startPoint = turnInstructions[i].coordinate;
-		let endPoint = turnInstructions[i + 1].coordinate;
+		const startPoint = turnInstructions[i].coordinate;
+		const endPoint = turnInstructions[i + 1].coordinate;
 
-		let distanceToSegment = util.coordinateToSegmentDistance(location, startPoint, endPoint);
+		const distanceToSegment = util.coordinateToSegmentDistance(location, startPoint, endPoint);
 		if (distanceToSegment < minDistance) {
 			currentWaypointId = i + 1;
 			minDistance = distanceToSegment;
@@ -102,26 +102,26 @@ export function determineCurrentWaypointId(
 }
 
 export async function fetchRoutingAPI(from: LngLatLike, to: LngLatLike): Promise<Route> {
-	let fromString = from.toString();
-	let toString = to.toString();
+	const fromString = from.toString();
+	const toString = to.toString();
 
 	// Load route in GPX format with turn information enabled. This way we can get both the
 	// path + the turn information in one query. The GPX can then be converted to GeoJSON
 	// for integration in Maplibre GL JS.
-	let staticRouteProperties =
+	const staticRouteProperties =
 		'&profile=Fastbike-lowtraffic-tertiaries&alternativeidx=0&format=gpx&timode=5';
-	let response = await fetch(
+	const response = await fetch(
 		`${routeUrl}?lonlats=${fromString}|${toString}${staticRouteProperties}`
 	);
 	if (!response.ok) {
 		throw new Error(response.statusText);
 	}
 
-	let gpxString = await response.text();
+	const gpxString = await response.text();
 	const [gpx, error] = parseGPX(gpxString);
 	if (error) throw error;
 
-	let turnInstructions = readTurnNavigationFromGPX(gpx);
+	const turnInstructions = readTurnNavigationFromGPX(gpx);
 
 	// add instructions for start and end, they are not included originally
 	turnInstructions.unshift({
@@ -139,13 +139,13 @@ export async function fetchRoutingAPI(from: LngLatLike, to: LngLatLike): Promise
 	};
 }
 
-async function fetchGeocodingAPI(locationString: String, limitElements: number) {
-	let response = await fetch(`${geocoderUrl}?q=${locationString}&limit=${limitElements}`);
+async function fetchGeocodingAPI(locationString: string, limitElements: number) {
+	const response = await fetch(`${geocoderUrl}?q=${locationString}&limit=${limitElements}`);
 	if (!response.ok) {
 		throw new Error(response.statusText);
 	}
 
-	let geojson = (await response.json()) as unknown as FeatureCollection;
+	const geojson = (await response.json()) as unknown as FeatureCollection;
 	if (!geojson) {
 		throw new Error('Could not convert router response to FeatureCollection');
 	}
