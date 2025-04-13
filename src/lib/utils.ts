@@ -122,3 +122,21 @@ export function coordinateToSegmentDistance(
 		end_.lat
 	);
 }
+
+export function roundRemainingDistance(distance: number) {
+	if (distance < 0) {
+		return 0;
+	}
+	const thresholds = [50, 150, 500];
+	const roundTo = [10, 25, 50];
+
+
+	for (let i = 0; i < thresholds.length; ++i) {
+		if (distance < thresholds[i]) {
+			return distance - (distance % roundTo[i]);
+		}
+	}
+
+	const roundToMax = 100;
+	return distance - (distance % roundToMax);
+}

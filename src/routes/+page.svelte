@@ -38,11 +38,13 @@
 		offwhite: '#EEEEEE'
 	};
 	const NAVIGATION_ZOOM = 17;
+	const MAX_ZOOM = 17;
 
 	let devMode = true; // enables dragging of position marker and debugging route display
 	let pathGeoJson: FeatureCollection | null = $state(null);
 	let turnInstructions: Array<api.TurnInstruction> = $state([]);
 	let turnDisplayString = $state('');
+	let turnDisplayIconName = $state('');
 	let currentBounds: LngLatBoundsLike | undefined = $state(undefined);
 	let currentUserLocation: LngLatLike | undefined = $state(undefined);
 	let currentUserBearing: number | undefined = $state(undefined);
@@ -75,7 +77,40 @@
 		let targetId = api.determineCurrentWaypointId(location, turnInstructions);
 		let currentTurnInstruction = turnInstructions[targetId];
 		let distanceMeters = util.distanceMeter(location, currentTurnInstruction.coordinate);
-		turnDisplayString = currentTurnInstruction.instruction + ' in ' + distanceMeters + 'm';
+		switch (currentTurnInstruction.instruction) {
+			case 'straight':
+				turnDisplayIconName = 'arrow-narrow-up';
+				break;
+			case 'right':
+				turnDisplayIconName = 'corner-up-right';
+				break;
+			case 'left':
+				turnDisplayIconName = 'corner-up-left';
+				break;
+			case 'keep right':
+			case 'slight right':
+				turnDisplayIconName = 'arrow-bear-right';
+				break;
+			case 'keep left':
+			case 'slight left':
+				turnDisplayIconName = 'arrow-bear-left';
+				break;
+			case 'sharp right':
+				turnDisplayIconName = 'arrow-sharp-turn-right';
+				break;
+			case 'sharp left':
+				turnDisplayIconName = 'arrow-sharp-turn-left';
+				break;
+			default:
+				turnDisplayIconName = '';
+		}
+
+		let displayDistance = util.roundRemainingDistance(distanceMeters);
+		if (turnDisplayIconName === '') {
+			turnDisplayString = currentTurnInstruction.instruction + ' in ' + displayDistance + 'm';
+		} else {
+			turnDisplayString = displayDistance + 'm';
+		}
 
 		if (targetId > 0) {
 			let lastTurnInstruction = turnInstructions[targetId - 1];
@@ -165,6 +200,16 @@
 		}
 	}
 
+	function toHomeScreen() {
+		appState = 'SearchingRoute';
+
+		if (currentUserLocation !== undefined) {
+			cameraState.center = currentUserLocation;
+		}
+		cameraState.zoom = 12;
+		cameraState.pitch = 0;
+	}
+
 	function startRouting() {
 		setupGeolocationWatch();
 
@@ -251,7 +296,8 @@
 	let mapClasses = 'relative w-full h-full';
 	let mainContainerWidth = 'min-w-sm max-w-1/3';
 	let mainContainerClasses =
-		mainContainerWidth + ' bg-faded-white pointer-events-auto m-1 flex p-2 rounded-lg';
+		mainContainerWidth +
+		' bg-faded-white backdrop-blur-sm pointer-events-auto m-1 flex p-2 rounded-lg';
 </script>
 
 <div class="h-screen w-screen">
@@ -312,9 +358,19 @@
 							onfocus={handleFromFocus}
 							onkeyup={util.debounce(queryFromSuggestions, 500)}
 						/>
-						<Button onclick={queryFromGeoposition} class="bg-secondary text-offwhite w-1/8"
-							>GPS</Button
-						>
+						<Button onclick={queryFromGeoposition} class="bg-secondary text-offwhite w-14 p-0">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="24"
+								height="24"
+								viewBox="0 0 24 24"
+								fill="currentColor"
+								class="icon icon-tabler icons-tabler-filled icon-tabler-gps"
+								><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path
+									d="M17 3.34a10 10 0 1 1 -15 8.66l.005 -.324a10 10 0 0 1 14.995 -8.336m-.086 5.066c.372 -.837 -.483 -1.692 -1.32 -1.32l-9 4l-.108 .055c-.75 .44 -.611 1.609 .271 1.83l3.418 .853l.855 3.419c.23 .922 1.498 1.032 1.884 .163z"
+								/></svg
+							>
+						</Button>
 					</div>
 
 					<div class="flex flex-row gap-1">
@@ -325,9 +381,19 @@
 							onfocus={handleToFocus}
 							onkeyup={util.debounce(queryToSuggestions, 500)}
 						/>
-						<Button onclick={queryToGeoposition} class="bg-secondary text-offwhite w-1/8"
-							>GPS</Button
-						>
+						<Button onclick={queryToGeoposition} class="bg-secondary text-offwhite w-14 p-0">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="24"
+								height="24"
+								viewBox="0 0 24 24"
+								fill="currentColor"
+								class="icon icon-tabler icons-tabler-filled icon-tabler-gps"
+								><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path
+									d="M17 3.34a10 10 0 1 1 -15 8.66l.005 -.324a10 10 0 0 1 14.995 -8.336m-.086 5.066c.372 -.837 -.483 -1.692 -1.32 -1.32l-9 4l-.108 .055c-.75 .44 -.611 1.609 .271 1.83l3.418 .853l.855 3.419c.23 .922 1.498 1.032 1.884 .163z"
+								/></svg
+							>
+						</Button>
 					</div>
 
 					<Input
@@ -376,7 +442,7 @@
 		{#if appState === 'DisplayingRoute'}
 			<div class={mainContainerClasses}>
 				<div class="flex w-full flex-col gap-1">
-					<Button class="bg-primary" onclick={() => (appState = 'SearchingRoute')}>Back</Button>
+					<Button class="bg-primary" onclick={toHomeScreen}>Back</Button>
 					<Button class="bg-themegreen" onclick={startRouting}>Start navigation</Button>
 				</div>
 			</div>
@@ -385,28 +451,46 @@
 		{/if}
 
 		{#if appState === 'Routing'}
-			<div class={mainContainerClasses}>
-				<div class="flex w-full flex-col gap-1">
-					<Button class="bg-primary" onclick={() => (appState = 'SearchingRoute')}
-						>Cancel navigation</Button
+			<div class={mainContainerClasses + ' items-center justify-center pt-5 pb-5 text-xl'}>
+				<Button class="bg-primary absolute top-1 left-1 m-1 h-12 w-12 p-3" onclick={toHomeScreen}>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="24"
+						height="24"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						class="icon icon-tabler icons-tabler-outline icon-tabler-x"
+						><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M18 6l-12 12" /><path
+							d="M6 6l12 12"
+						/></svg
 					>
-				</div>
-			</div>
+				</Button>
 
-			<div
-				class={mainContainerClasses +
-					' absolute top-20 right-1 h-1/8 w-1/3 items-center justify-center text-xl'}
-			>
-				{turnDisplayString}
+				<div class="flex flex-col items-center gap-2">
+					{#if turnDisplayIconName !== ''}
+						<div class="h-20 w-20">
+							<img
+								class="h-full w-full"
+								src="/navigation-icons/{turnDisplayIconName}.svg"
+								alt="turn navigation icon"
+							/>
+						</div>
+					{/if}
+					<div class="text-xl">
+						{turnDisplayString}
+					</div>
+				</div>
 			</div>
 		{/if}
 
 		{#if appState === 'FinishedRouting'}
 			<div class={mainContainerClasses}>
 				<div class="flex w-full flex-col gap-1">
-					<Button class="bg-primary" onclick={() => (appState = 'SearchingRoute')}
-						>Start new navigation</Button
-					>
+					<Button class="bg-primary" onclick={toHomeScreen}>Start new navigation</Button>
 					<div class="m-5 text-center text-xl">You arrived at your destination!</div>
 				</div>
 			</div>
@@ -423,7 +507,7 @@
 		pitch={cameraState.pitch}
 		pitchWithRotate={false}
 		bounds={currentBounds}
-		maxZoom={NAVIGATION_ZOOM}
+		maxZoom={MAX_ZOOM}
 	>
 		{#if pathGeoJson}
 			<GeoJSON data={pathGeoJson!}>

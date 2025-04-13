@@ -31,6 +31,10 @@ PORT={your port} node build
 There is a comparison of different open-source routing projects at https://wiki.openstreetmap.org/wiki/Routing/online_routers.
 breezebike currently uses Brouter, in the future I want to test OpenRouteService as well.
 
+## Icons
+
+https://tabler.io/icons
+
 ## Todo
 
 - always focus user if position available
