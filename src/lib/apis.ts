@@ -3,8 +3,6 @@ import type { FeatureCollection } from 'geojson';
 import { type LngLatLike } from 'svelte-maplibre';
 import { ParsedGPX, parseGPX } from '@we-gold/gpxjs';
 
-// export const tileUrl = 'https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}';
-// export const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const routeUrl = 'https://bikerouter.de/brouter-engine/brouter';
 const geocoderUrl = 'https://photon.komoot.io/api/';
 
@@ -17,6 +15,13 @@ export type Route = {
 	geojson: FeatureCollection;
 	turnInstructions: Array<TurnInstruction>;
 };
+
+export type RoutingProfile = "Trekking" | "Road bike" | "Gravel" | "Mountainbike";
+const routingProfileToBrouterName = new Map<RoutingProfile, string>();
+routingProfileToBrouterName.set("Trekking", "trekking");
+routingProfileToBrouterName.set("Road bike", "Fastbike-lowtraffic-tertiaries");
+routingProfileToBrouterName.set("Gravel", "m11n-gravel");
+routingProfileToBrouterName.set("Mountainbike", "MTB");
 
 export type Suggestion = [string, LngLatLike];
 
@@ -103,17 +108,21 @@ export function determineCurrentWaypointId(
 	return currentWaypointId;
 }
 
-export async function fetchRoutingAPI(from: LngLatLike, to: LngLatLike): Promise<Route> {
+export async function fetchRoutingAPI(from: LngLatLike, to: LngLatLike, profile: RoutingProfile): Promise<Route> {
 	const fromString = from.toString();
 	const toString = to.toString();
+	const brouterProfileName = routingProfileToBrouterName.get(profile);
+	if (brouterProfileName === undefined) {
+		throw new Error("Invalid profile name");
+	}
 
 	// Load route in GPX format with turn information enabled. This way we can get both the
 	// path + the turn information in one query. The GPX can then be converted to GeoJSON
 	// for integration in Maplibre GL JS.
 	const staticRouteProperties =
-		'&profile=Fastbike-lowtraffic-tertiaries&alternativeidx=0&format=gpx&timode=5';
+		'&alternativeidx=0&format=gpx&timode=5';
 	const response = await fetch(
-		`${routeUrl}?lonlats=${fromString}|${toString}${staticRouteProperties}`
+		`${routeUrl}?lonlats=${fromString}|${toString}&profile=${brouterProfileName}${staticRouteProperties}`
 	);
 	if (!response.ok) {
 		throw new Error(response.statusText);

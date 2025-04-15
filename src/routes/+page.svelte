@@ -4,7 +4,18 @@
 	import { type LngLatLike, type LngLatBoundsLike } from 'maplibre-gl';
 	import { MapLibre, GeoJSON, LineLayer, Marker } from 'svelte-maplibre';
 	import type { FeatureCollection, LineString } from 'geojson';
-	import { Button, Spinner, Input, Navbar, NavBrand } from 'flowbite-svelte';
+	import {
+		Button,
+		Spinner,
+		Input,
+		Navbar,
+		NavBrand,
+		Card,
+		NavHamburger,
+		NavLi,
+		NavUl,
+		Modal
+	} from 'flowbite-svelte';
 
 	type InputField = {
 		input: string;
@@ -29,6 +40,9 @@
 	type AppState = 'SearchingRoute' | 'DisplayingRoute' | 'Routing' | 'FinishedRouting';
 	let appState: AppState = $state('SearchingRoute');
 
+	let currentRoutingProfile: api.RoutingProfile | undefined = $state(undefined);
+	let aboutModal = $state(false);
+
 	let colors = {
 		primary: '#F34213',
 		primaryLight: '#E0CA3C',
@@ -40,7 +54,7 @@
 	const NAVIGATION_ZOOM = 17;
 	const MAX_ZOOM = 17;
 
-	let devMode = true; // enables dragging of position marker and debugging route display
+	let devMode = false; // enables dragging of position marker and debugging route display
 	let pathGeoJson: FeatureCollection | null = $state(null);
 	let turnInstructions: Array<api.TurnInstruction> = $state([]);
 	let turnDisplayString = $state('');
@@ -149,24 +163,31 @@
 			return;
 		}
 
+		if (currentRoutingProfile === undefined) {
+			alert(`Please select a routing profile.`);
+			return;
+		}
+
 		console.log(`Fetched coords ${fromInput.location} -> ${toInput.location}`);
 
-		api.fetchRoutingAPI(fromInput.location, toInput.location).then((response) => {
-			pathGeoJson = response.geojson;
-			turnInstructions = response.turnInstructions;
-			if (pathGeoJson.features.length > 0) {
-				let geometry = pathGeoJson.features[0].geometry;
-				if (geometry.type !== 'LineString') {
-					return;
-				}
-				let lineString = geometry as LineString;
-				currentBounds = util.getBoundsFromPath(lineString);
-				console.log(`Setting bounds to ${currentBounds}`);
+		api
+			.fetchRoutingAPI(fromInput.location, toInput.location, currentRoutingProfile)
+			.then((response) => {
+				pathGeoJson = response.geojson;
+				turnInstructions = response.turnInstructions;
+				if (pathGeoJson.features.length > 0) {
+					let geometry = pathGeoJson.features[0].geometry;
+					if (geometry.type !== 'LineString') {
+						return;
+					}
+					let lineString = geometry as LineString;
+					currentBounds = util.getBoundsFromPath(lineString);
+					console.log(`Setting bounds to ${currentBounds}`);
 
-				loadingRoute = false;
-				appState = 'DisplayingRoute';
-			}
-		});
+					loadingRoute = false;
+					appState = 'DisplayingRoute';
+				}
+			});
 	}
 
 	function setupGeolocationWatch() {
@@ -178,10 +199,11 @@
 			let options: PositionOptions = {
 				enableHighAccuracy: true,
 				maximumAge: 0,
-				timeout: 200
+				timeout: 1000
 			};
 			gpsWatchId = navigator.geolocation.watchPosition(
 				(position: GeolocationPosition) => {
+					// in dev mode, let's ignore the GPS to allow us to drag for simulation
 					if (devMode && currentUserLocation !== undefined) {
 						return;
 					}
@@ -191,10 +213,9 @@
 						currentUserBearing = position.coords.heading;
 					}
 
-					// in dev mode, let's ignore the GPS to allow us to drag for simulation
 					handleUserLocationChanged(currentUserLocation);
 				},
-				null,
+				(error) => console.log(error),
 				options
 			);
 		}
@@ -229,8 +250,10 @@
 
 	function queryFromGeoposition() {
 		setupGeolocationWatch();
+		// console.log('setupGeolocationWatch');
 
 		if (currentUserLocation === undefined) {
+			console.log('setTimeout(queryFromGeoposition');
 			setTimeout(queryFromGeoposition, 50);
 			return;
 		}
@@ -300,16 +323,30 @@
 		' bg-faded-white backdrop-blur-sm pointer-events-auto m-1 flex p-2 rounded-lg';
 </script>
 
+<Modal title="About" class="z-2" bind:open={aboutModal} autoclose>
+	<p class="text-base leading-relaxed text-gray-500 dark:text-gray-400">
+		<b>breezebike</b> is a modern bike navigation frontend based on the
+		<a href="https://brouter.de" class="text-blue-500">BRouter</a> bike routing service. Also check
+		out
+		<a href="https://brouter.de/brouter-web" class="text-blue-500">brouter-web</a>
+		and <a href="https://bikerouter.de" class="text-blue-500">bikerouter.de</a>, the original
+		frontends for BRouter. They expose more features if you are interested in planning routes.
+	</p>
+	<p class="text-base leading-relaxed text-gray-500 dark:text-gray-400">
+		© <a href="https://cgphilipp.de">Philipp Otto</a> - 2025
+	</p>
+</Modal>
+
 <div class="h-screen w-screen">
 	{#if loadingRoute}
 		<div
-			class="pointer-events-none absolute z-100 flex h-screen w-screen items-center justify-center"
+			class="pointer-events-none absolute z-1 flex h-screen w-screen items-center justify-center"
 		>
 			<Spinner color="gray" />
 		</div>
 	{/if}
 
-	<div class="pointer-events-none absolute z-100 h-screen w-screen">
+	<div class="pointer-events-none absolute z-1 h-screen w-screen">
 		<Navbar class="bg-secondary text-offwhite pointer-events-auto w-screen">
 			<NavBrand href="/">
 				<div class="flex gap-2">
@@ -337,14 +374,16 @@
 					</div>
 				</div>
 			</NavBrand>
-			<!-- <NavHamburger /> -->
-			<!-- <NavUl>
-			<NavLi href="/">Home</NavLi>
-			<NavLi href="/about">About</NavLi>
-			<NavLi href="/docs/components/navbar">Navbar</NavLi>
-			<NavLi href="/pricing">Pricing</NavLi>
-			<NavLi href="/contact">Contact</NavLi>
-		</NavUl> -->
+			<NavHamburger />
+			<NavUl>
+				<!-- <NavLi href="/">Home</NavLi> -->
+				{#if currentRoutingProfile !== undefined}
+					<NavLi href="#" class="text-offwhite" onclick={() => (currentRoutingProfile = undefined)}>
+						Routing profile: {currentRoutingProfile}
+					</NavLi>
+				{/if}
+				<NavLi href="#" class="text-offwhite" onclick={() => (aboutModal = true)}>About</NavLi>
+			</NavUl>
 		</Navbar>
 
 		{#if appState === 'SearchingRoute'}
@@ -435,6 +474,30 @@
 							onclick={() => applyToSuggestion(toSuggestion)}>{toSuggestion[0]}</Button
 						>
 					{/each}
+				</div>
+			{/if}
+
+			{#if currentRoutingProfile === undefined}
+				<div class="flex h-1/2 w-full items-center justify-center">
+					<Card class="bg-faded-white pointer-events-auto backdrop-blur-sm">
+						<p class="text-offblack mb-4">Select your profile:</p>
+						<div class="grid w-full grid-cols-2 gap-2 text-center">
+							<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Trekking')}
+								>Trekking</Button
+							>
+							<Button
+								class="bg-secondary h-16"
+								onclick={() => (currentRoutingProfile = 'Road bike')}>Road bike</Button
+							>
+							<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Gravel')}
+								>Gravel</Button
+							>
+							<Button
+								class="bg-secondary h-16"
+								onclick={() => (currentRoutingProfile = 'Mountainbike')}>MTB</Button
+							>
+						</div>
+					</Card>
 				</div>
 			{/if}
 		{/if}
