@@ -335,6 +335,24 @@
 	</p>
 </Modal>
 
+<Modal open={currentRoutingProfile === undefined}>
+	<p class="text-offblack mb-4">Select your profile:</p>
+	<div class="grid w-full grid-cols-2 gap-2 text-center">
+		<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Trekking')}
+			>Trekking</Button
+		>
+		<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Road bike')}
+			>Road bike</Button
+		>
+		<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Gravel')}
+			>Gravel</Button
+		>
+		<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Mountainbike')}
+			>MTB</Button
+		>
+	</div>
+</Modal>
+
 <div class="h-screen w-screen">
 	{#if loadingRoute}
 		<div
@@ -345,44 +363,50 @@
 	{/if}
 
 	<div class="pointer-events-none absolute z-1 h-screen w-screen">
-		<Navbar class="bg-secondary text-offwhite pointer-events-auto w-screen">
-			<NavBrand href="/">
-				<div class="flex gap-2">
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="1.8em"
-						height="1.8em"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						class="icon icon-tabler icons-tabler-filled icon-tabler-bike"
-					>
-						<path stroke="none" d="M0 0h24v24H0z" fill="none" /><path
-							d="M5 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"
-						/><path d="M19 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path
-							d="M12 19l0 -4l-3 -3l5 -4l2 3l3 0"
-						/><path d="M17 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-					</svg>
-					<div class="flex">
-						<h1 class="text-xl font-bold">breezebike</h1>
-						<div class="text-xs">beta</div>
+		{#if appState !== 'Routing'}
+			<Navbar class="bg-secondary text-offwhite pointer-events-auto w-screen">
+				<NavBrand href="/">
+					<div class="flex gap-2">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="1.8em"
+							height="1.8em"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							class="icon icon-tabler icons-tabler-filled icon-tabler-bike"
+						>
+							<path stroke="none" d="M0 0h24v24H0z" fill="none" /><path
+								d="M5 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"
+							/><path d="M19 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path
+								d="M12 19l0 -4l-3 -3l5 -4l2 3l3 0"
+							/><path d="M17 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+						</svg>
+						<div class="flex">
+							<h1 class="text-xl font-bold">breezebike</h1>
+							<div class="text-xs">beta</div>
+						</div>
 					</div>
-				</div>
-			</NavBrand>
-			<NavHamburger />
-			<NavUl>
-				<!-- <NavLi href="/">Home</NavLi> -->
-				{#if currentRoutingProfile !== undefined}
-					<NavLi href="#" class="text-offwhite" onclick={() => (currentRoutingProfile = undefined)}>
-						Routing profile: {currentRoutingProfile}
-					</NavLi>
-				{/if}
-				<NavLi href="#" class="text-offwhite" onclick={() => (aboutModal = true)}>About</NavLi>
-			</NavUl>
-		</Navbar>
+				</NavBrand>
+				<NavHamburger />
+				<NavUl>
+					<!-- <NavLi href="/">Home</NavLi> -->
+					{#if currentRoutingProfile !== undefined}
+						<NavLi
+							href="#"
+							class="text-offwhite"
+							onclick={() => (currentRoutingProfile = undefined)}
+						>
+							Routing profile: {currentRoutingProfile}
+						</NavLi>
+					{/if}
+					<NavLi href="#" class="text-offwhite" onclick={() => (aboutModal = true)}>About</NavLi>
+				</NavUl>
+			</Navbar>
+		{/if}
 
 		{#if appState === 'SearchingRoute'}
 			<div class={mainContainerClasses}>
@@ -474,30 +498,6 @@
 					{/each}
 				</div>
 			{/if}
-
-			{#if currentRoutingProfile === undefined}
-				<div class="flex h-1/2 w-full items-center justify-center">
-					<Card class="bg-faded-white pointer-events-auto backdrop-blur-sm">
-						<p class="text-offblack mb-4">Select your profile:</p>
-						<div class="grid w-full grid-cols-2 gap-2 text-center">
-							<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Trekking')}
-								>Trekking</Button
-							>
-							<Button
-								class="bg-secondary h-16"
-								onclick={() => (currentRoutingProfile = 'Road bike')}>Road bike</Button
-							>
-							<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Gravel')}
-								>Gravel</Button
-							>
-							<Button
-								class="bg-secondary h-16"
-								onclick={() => (currentRoutingProfile = 'Mountainbike')}>MTB</Button
-							>
-						</div>
-					</Card>
-				</div>
-			{/if}
 		{/if}
 
 		{#if appState === 'DisplayingRoute'}
@@ -530,40 +530,45 @@
 		{/if}
 
 		{#if appState === 'Routing'}
-			<div class={mainContainerClasses + ' items-center justify-center pt-5 pb-5 text-xl'}>
-				<Button class="bg-primary absolute top-1 left-1 m-1 h-12 w-12 p-3" onclick={toHomeScreen}>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						width="24"
-						height="24"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						class="icon icon-tabler icons-tabler-outline icon-tabler-x"
-						><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M18 6l-12 12" /><path
-							d="M6 6l12 12"
-						/></svg
-					>
-				</Button>
-
-				<div class="flex flex-col items-center gap-2">
-					{#if turnDisplayIconName !== ''}
-						<div class="h-20 w-20">
-							<img
-								class="h-full w-full"
-								src="/navigation-icons/{turnDisplayIconName}.svg"
-								alt="turn navigation icon"
-							/>
+			{#if turnDisplayIconName !== '' || turnDisplayString !== ''}
+				<div class={mainContainerClasses + ' items-center justify-center pt-5 pb-5 text-xl'}>
+					<div class="flex flex-col items-center gap-2">
+						{#if turnDisplayIconName !== ''}
+							<div class="h-20 w-20">
+								<img
+									class="h-full w-full"
+									src="/navigation-icons/{turnDisplayIconName}.svg"
+									alt="turn navigation icon"
+								/>
+							</div>
+						{/if}
+						<div class="text-xl">
+							{turnDisplayString}
 						</div>
-					{/if}
-					<div class="text-xl">
-						{turnDisplayString}
 					</div>
 				</div>
-			</div>
+			{/if}
+
+			<Button
+				class="bg-primary pointer-events-auto absolute top-1 left-1 m-1 h-12 w-12 p-3"
+				onclick={toHomeScreen}
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="24"
+					height="24"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="icon icon-tabler icons-tabler-outline icon-tabler-x"
+					><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M18 6l-12 12" /><path
+						d="M6 6l12 12"
+					/></svg
+				>
+			</Button>
 		{/if}
 
 		{#if appState === 'FinishedRouting'}
