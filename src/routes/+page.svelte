@@ -316,11 +316,9 @@
 		fromInput.focused = false;
 	}
 
-	let mapClasses = 'relative w-full h-full';
-	let mainContainerWidth = 'min-w-sm max-w-1/3';
+	let mainContainerWidth = 'sm:w-full md:w-1/2 lg:w-1/3';
 	let mainContainerClasses =
-		mainContainerWidth +
-		' bg-faded-white backdrop-blur-sm pointer-events-auto m-1 flex p-2 rounded-lg';
+		mainContainerWidth + ' bg-faded-white backdrop-blur-sm pointer-events-auto p-2 flex rounded-lg';
 </script>
 
 <Modal title="About" class="z-2" bind:open={aboutModal} autoclose>
@@ -504,9 +502,27 @@
 
 		{#if appState === 'DisplayingRoute'}
 			<div class={mainContainerClasses}>
-				<div class="flex w-full flex-col gap-1">
-					<Button class="bg-primary" onclick={toHomeScreen}>Back</Button>
-					<Button class="bg-themegreen" onclick={startRouting}>Start navigation</Button>
+				<div class="flex w-full flex-row gap-1">
+					<Button class="bg-primary h-12 w-12 p-3" onclick={toHomeScreen}>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="24"
+							height="24"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							class="icon icon-tabler icons-tabler-outline icon-tabler-x"
+							><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M18 6l-12 12" /><path
+								d="M6 6l12 12"
+							/></svg
+						>
+					</Button>
+					<Button class="bg-themegreen h-12 flex-grow" onclick={startRouting}
+						>Start navigation</Button
+					>
 				</div>
 			</div>
 
@@ -562,7 +578,7 @@
 
 	<MapLibre
 		style="/styles/versatiles.json"
-		class={mapClasses}
+		class="relative h-full w-full"
 		standardControls="bottom-right"
 		center={cameraState.center}
 		zoom={cameraState.zoom}
