@@ -1,0 +1,45 @@
+{
+    "name": "breezebike",
+    "short_name": "breezebike",
+    "start_url": "https://bike.cgphilipp.de",
+    "display": "standalone",
+    "description": "A modern bike routing app based OpenStreetMap and BRouter",
+    "lang": "en",
+    "dir": "auto",
+    "theme_color": "#000000",
+    "background_color": "#000000",
+    "orientation": "any",
+    "icons": [
+        {
+            "src": "https://bike.cgphilipp.de/icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "",
+            "sizes": "1920x1080",
+            "type": "image/png",
+            "description": "A screenshot of the home page"
+        }
+    ],
+    "prefer_related_applications": false,
+    "shortcuts": [
+        {
+            "name": "breezebike",
+            "url": "/",
+            "description": "breezebike - main page"
+        }
+    ],
+    "protocol_handlers": [
+        {
+            "protocol": "mailto",
+            "url": "/newEmail?to=%s"
+        }
+    ],
+    "display_override": [
+        "window-controls-overlay"
+    ]
+}

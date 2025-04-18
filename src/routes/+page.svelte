@@ -10,7 +10,6 @@
 		Input,
 		Navbar,
 		NavBrand,
-		Card,
 		NavHamburger,
 		NavLi,
 		NavUl,
