@@ -60,7 +60,7 @@
 	let turnDisplayIconName = $state('');
 	let currentBounds: LngLatBoundsLike | undefined = $state(undefined);
 	let currentUserLocation: LngLatLike | undefined = $state(undefined);
-	let currentUserBearing: number | undefined = $state(undefined);
+	let currentUserBearing: number = $state(0);
 
 	let gpsWatchId: number | null = null;
 
@@ -81,6 +81,7 @@
 	});
 
 	let loadingRoute = $state(false);
+	let loadingGps = $state(false);
 
 	function handleUserLocationChanged(location: LngLatLike) {
 		if (appState !== 'Routing') {
@@ -143,7 +144,6 @@
 	}
 
 	async function calculateRoute() {
-		loadingRoute = true;
 		console.log(`Routing from ${fromInput.input} to ${toInput.input}...`);
 
 		if (fromInput.location === null) {
@@ -168,6 +168,7 @@
 		}
 
 		console.log(`Fetched coords ${fromInput.location} -> ${toInput.location}`);
+		loadingRoute = true;
 
 		api
 			.fetchRoutingAPI(fromInput.location, toInput.location, currentRoutingProfile)
@@ -207,6 +208,8 @@
 						return;
 					}
 
+					loadingGps = false;
+
 					currentUserLocation = [position.coords.longitude, position.coords.latitude];
 					if (position.coords.heading !== null) {
 						currentUserBearing = position.coords.heading;
@@ -217,6 +220,7 @@
 				(error) => console.log(error),
 				options
 			);
+			loadingGps = true;
 		}
 	}
 
@@ -237,8 +241,13 @@
 		if (currentUserLocation !== undefined) {
 			cameraState.center = currentUserLocation;
 		}
+
 		cameraState.zoom = NAVIGATION_ZOOM;
 		cameraState.pitch = 30;
+		if (currentUserLocation !== undefined) {
+			cameraState.center = currentUserLocation;
+			handleUserLocationChanged(currentUserLocation); // update turn-by-turn, bearing, ...
+		}
 	}
 
 	function finishRouting() {
@@ -249,11 +258,9 @@
 
 	function queryFromGeoposition() {
 		setupGeolocationWatch();
-		// console.log('setupGeolocationWatch');
 
 		if (currentUserLocation === undefined) {
-			console.log('setTimeout(queryFromGeoposition');
-			setTimeout(queryFromGeoposition, 50);
+			setTimeout(queryFromGeoposition, 100);
 			return;
 		}
 		fromInput.input = currentUserLocation.toString();
@@ -264,7 +271,7 @@
 		setupGeolocationWatch();
 
 		if (currentUserLocation === undefined) {
-			setTimeout(queryToGeoposition, 50);
+			setTimeout(queryToGeoposition, 100);
 			return;
 		}
 		toInput.input = currentUserLocation.toString();
@@ -353,7 +360,7 @@
 </Modal>
 
 <div class="h-screen w-screen">
-	{#if loadingRoute}
+	{#if loadingRoute || loadingGps}
 		<div
 			class="pointer-events-none absolute z-1 flex h-screen w-screen items-center justify-center"
 		>
@@ -465,13 +472,17 @@
 				</form>
 			</div>
 
-			{#if fromInput.suggestions.length > 0}
+			{#if fromInput.suggestions.length > 0 || fromInput.loadingSuggestion}
 				<div
 					class={'bg-faded-white pointer-events-auto m-1 flex flex-col gap-1 p-2 ' +
 						mainContainerWidth}
 					class:hidden={!fromInput.focused}
 				>
 					<!-- <Button class="w-full">Choose on map</Button> -->
+
+					{#if fromInput.loadingSuggestion}
+						<p class="text-center">Loading...</p>
+					{/if}
 
 					{#each fromInput.suggestions as fromSuggestion (fromSuggestion[1])}
 						<Button
@@ -482,13 +493,18 @@
 				</div>
 			{/if}
 
-			{#if toInput.suggestions.length > 0}
+			{#if toInput.suggestions.length > 0 || toInput.loadingSuggestion}
 				<div
 					class={'bg-faded-white pointer-events-auto m-1 flex flex-col gap-1 p-2 ' +
 						mainContainerWidth}
 					class:hidden={!toInput.focused}
 				>
 					<!-- <Button class="w-full">Choose on map</Button> -->
+
+					{#if toInput.loadingSuggestion}
+						<p class="text-center">Loading...</p>
+					{/if}
+
 					{#each toInput.suggestions as toSuggestion (toSuggestion[1])}
 						<Button
 							class="text-offblack border-offblackalpha w-full border bg-white"
@@ -604,7 +620,11 @@
 
 		{#if !devMode}
 			{#if currentUserLocation}
-				<Marker lngLat={currentUserLocation} rotation={currentUserBearing} class="h-8 w-8">
+				<Marker
+					lngLat={currentUserLocation}
+					rotation={currentUserBearing - cameraState.bearing}
+					class="h-8 w-8"
+				>
 					<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
 						<polygon points="50,15 80,80 50,65 20,80" fill={colors.secondary} />
 					</svg>
@@ -618,7 +638,7 @@
 				<Marker
 					draggable
 					bind:lngLat={currentUserLocation}
-					rotation={currentUserBearing}
+					rotation={currentUserBearing - cameraState.bearing}
 					ondragend={() => handleUserLocationChanged(currentUserLocation!)}
 					class="h-8 w-8"
 				>
