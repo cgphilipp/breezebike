@@ -42,6 +42,8 @@
 	let currentRoutingProfile: api.RoutingProfile | undefined = $state(undefined);
 	let aboutModal = $state(false);
 
+	let wakeLock: WakeLockSentinel | null = null;
+
 	let colors = {
 		primary: '#F34213',
 		primaryLight: '#E0CA3C',
@@ -51,9 +53,9 @@
 		offwhite: '#EEEEEE'
 	};
 	const NAVIGATION_ZOOM = 17;
-	const MAX_ZOOM = 17;
+	const MAX_ZOOM = 18;
 
-	let devMode = false; // enables dragging of position marker and debugging route display
+	let devMode = true; // enables dragging of position marker and debugging route display
 	let pathGeoJson: FeatureCollection | null = $state(null);
 	let turnInstructions: Array<api.TurnInstruction> = $state([]);
 	let turnDisplayString = $state('');
@@ -232,10 +234,32 @@
 		}
 		cameraState.zoom = 12;
 		cameraState.pitch = 0;
+
+		fromInput = {
+			input: '',
+			focused: false,
+			loadingSuggestion: false,
+			location: null,
+			suggestions: []
+		};
+		toInput = {
+			input: '',
+			focused: false,
+			loadingSuggestion: false,
+			location: null,
+			suggestions: []
+		};
+
+		if (wakeLock !== null) {
+			wakeLock.release().then(() => (wakeLock = null));
+		}
 	}
 
 	function startRouting() {
 		setupGeolocationWatch();
+		if (wakeLock === null) {
+			util.requestWakeLock().then((wl) => (wakeLock = wl));
+		}
 
 		appState = 'Routing';
 		if (currentUserLocation !== undefined) {
@@ -618,35 +642,18 @@
 			</GeoJSON>
 		{/if}
 
-		{#if !devMode}
-			{#if currentUserLocation}
-				<Marker
-					lngLat={currentUserLocation}
-					rotation={currentUserBearing - cameraState.bearing}
-					class="h-8 w-8"
-				>
-					<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-						<polygon points="50,15 80,80 50,65 20,80" fill={colors.secondary} />
-					</svg>
-				</Marker>
-			{/if}
-		{/if}
-
-		<!-- display draggable user marker -->
-		{#if devMode}
-			{#if currentUserLocation}
-				<Marker
-					draggable
-					bind:lngLat={currentUserLocation}
-					rotation={currentUserBearing - cameraState.bearing}
-					ondragend={() => handleUserLocationChanged(currentUserLocation!)}
-					class="h-8 w-8"
-				>
-					<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-						<polygon points="50,15 80,80 50,65 20,80" fill={colors.secondary} />
-					</svg>
-				</Marker>
-			{/if}
+		{#if currentUserLocation}
+			<Marker
+				bind:lngLat={currentUserLocation}
+				rotation={currentUserBearing - cameraState.bearing}
+				class="h-8 w-8"
+				draggable={devMode}
+				ondragend={() => handleUserLocationChanged(currentUserLocation!)}
+			>
+				<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+					<polygon points="50,15 80,80 50,65 20,80" fill={colors.secondary} />
+				</svg>
+			</Marker>
 		{/if}
 
 		{#each turnInstructions as instruction (instruction.coordinate)}
