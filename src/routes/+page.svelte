@@ -52,6 +52,7 @@
 		black: '#000F08',
 		offwhite: '#EEEEEE'
 	};
+	const DEFAULT_ZOOM = 12;
 	const NAVIGATION_ZOOM = 17;
 	const MAX_ZOOM = 18;
 
@@ -86,6 +87,13 @@
 	let loadingGps = $state(false);
 
 	function handleUserLocationChanged(location: LngLatLike) {
+		if (appState !== 'Routing' && appState !== 'FinishedRouting') {
+			return;
+		}
+
+		// todo: provide ability to go into "custom" camera mode while navigating
+		cameraState.center = location;
+
 		if (appState !== 'Routing') {
 			return;
 		}
@@ -135,9 +143,6 @@
 				currentTurnInstruction.coordinate
 			);
 		}
-
-		// todo: provide ability to go into "custom" camera mode while navigating
-		cameraState.center = location;
 
 		// hacky :)
 		if (currentTurnInstruction.instruction === 'Destination' && distanceMeters < 10) {
@@ -232,7 +237,8 @@
 		if (currentUserLocation !== undefined) {
 			cameraState.center = currentUserLocation;
 		}
-		cameraState.zoom = 12;
+		cameraState.zoom = DEFAULT_ZOOM;
+		cameraState.bearing = 0;
 		cameraState.pitch = 0;
 
 		fromInput = {
@@ -278,6 +284,10 @@
 		appState = 'FinishedRouting';
 		turnInstructions = [];
 		pathGeoJson = null;
+
+		cameraState.zoom = NAVIGATION_ZOOM;
+		cameraState.bearing = 0;
+		cameraState.pitch = 0;
 	}
 
 	function queryFromGeoposition() {
@@ -394,7 +404,7 @@
 
 	<div class="pointer-events-none absolute z-1 h-screen w-screen">
 		{#if appState !== 'Routing'}
-			<Navbar class="bg-secondary text-offwhite pointer-events-auto w-screen">
+			<Navbar class="bg-secondary text-offwhite pointer-events-auto" fluid={true}>
 				<NavBrand href="/">
 					<div class="flex gap-2">
 						<svg
@@ -422,17 +432,12 @@
 					</div>
 				</NavBrand>
 				<NavHamburger />
-				<NavUl>
-					<!-- <NavLi href="/">Home</NavLi> -->
-					{#if currentRoutingProfile !== undefined}
-						<NavLi
-							href="#"
-							class="text-offwhite"
-							onclick={() => (currentRoutingProfile = undefined)}
-						>
-							Routing profile: {currentRoutingProfile}
-						</NavLi>
-					{/if}
+				<NavUl
+					ulClass="bg-secondary flex flex-col p-4 mt-4 md:flex-row md:space-x-8 rtl:space-x-reverse md:mt-0 md:text-sm md:font-medium"
+				>
+					<NavLi href="#" class="text-offwhite" onclick={() => (currentRoutingProfile = undefined)}>
+						Routing profile: {currentRoutingProfile ? currentRoutingProfile : 'None'}
+					</NavLi>
 					<NavLi href="#" class="text-offwhite" onclick={() => (aboutModal = true)}>About</NavLi>
 				</NavUl>
 			</Navbar>

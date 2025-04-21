@@ -16,6 +16,18 @@ export const debounce = (callback: Function, wait = 300) => {
 	};
 };
 
+export async function requestWakeLock() {
+	try {
+		const wakeLock = await navigator.wakeLock.request('screen');
+		console.log('Wake lock is active');
+
+		return wakeLock;
+	} catch (err) {
+		console.error(`Error while requesting wake lock: ${err}`);
+	}
+	return null;
+}
+
 export function getBoundsFromPath(path: LineString) {
 	const result: LngLatBoundsLike = [Number.MAX_VALUE, Number.MAX_VALUE, Number.MIN_VALUE, Number.MIN_VALUE];
 	for (const point of path.coordinates) {
