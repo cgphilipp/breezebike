@@ -42,6 +42,7 @@
 
 	let currentRoutingProfile: api.RoutingProfile | undefined = $state(undefined);
 	let aboutModal = $state(false);
+	let profileChooseModal = $state(true);
 
 	let wakeLock: WakeLockSentinel | null = null;
 
@@ -370,25 +371,53 @@
 		and <a href="https://bikerouter.de" class="text-blue-500">bikerouter.de</a>, the original
 		frontends for BRouter. They expose more features if you are interested in planning routes.
 	</p>
+	Powered by
+	<ul class="ml-5 list-disc">
+		<li>
+			<a href="https://www.openstreetmap.org/about" class="text-blue-500">OpenStreetMap</a> (map data)
+		</li>
+		<li>
+			<a href="https://versatiles.org/" class="text-blue-500">Versatiles</a> (map style and tile server)
+		</li>
+		<li>
+			<a href="https://photon.komoot.io/" class="text-blue-500">Komoot photon</a> (autocomplete)
+		</li>
+	</ul>
 	<p class="text-base leading-relaxed text-gray-500 dark:text-gray-400">
-		© <a href="https://cgphilipp.de">Philipp Otto</a> - 2025
+		© 2025 <a href="https://cgphilipp.de" class="text-blue-500">Philipp Otto</a>
 	</p>
 </Modal>
 
-<Modal open={currentRoutingProfile === undefined}>
+<Modal bind:open={profileChooseModal}>
 	<p class="text-offblack mb-4">Select your profile:</p>
 	<div class="grid w-full grid-cols-2 gap-2 text-center">
-		<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Trekking')}
-			>Trekking</Button
+		<Button
+			class="bg-secondary h-16"
+			onclick={() => {
+				currentRoutingProfile = 'Trekking';
+				profileChooseModal = false;
+			}}>Trekking</Button
 		>
-		<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Road bike')}
-			>Road bike</Button
+		<Button
+			class="bg-secondary h-16"
+			onclick={() => {
+				currentRoutingProfile = 'Road bike';
+				profileChooseModal = false;
+			}}>Road bike</Button
 		>
-		<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Gravel')}
-			>Gravel</Button
+		<Button
+			class="bg-secondary h-16"
+			onclick={() => {
+				currentRoutingProfile = 'Gravel';
+				profileChooseModal = false;
+			}}>Gravel</Button
 		>
-		<Button class="bg-secondary h-16" onclick={() => (currentRoutingProfile = 'Mountainbike')}
-			>MTB</Button
+		<Button
+			class="bg-secondary h-16"
+			onclick={() => {
+				currentRoutingProfile = 'Mountainbike';
+				profileChooseModal = false;
+			}}>MTB</Button
 		>
 	</div>
 </Modal>
@@ -435,7 +464,7 @@
 				<NavUl
 					ulClass="bg-secondary flex flex-col p-4 mt-4 md:flex-row md:space-x-8 rtl:space-x-reverse md:mt-0 md:text-sm md:font-medium"
 				>
-					<NavLi href="#" class="text-offwhite" onclick={() => (currentRoutingProfile = undefined)}>
+					<NavLi href="#" class="text-offwhite" onclick={() => (profileChooseModal = true)}>
 						Routing profile: {currentRoutingProfile ? currentRoutingProfile : 'None'}
 					</NavLi>
 					<NavLi href="#" class="text-offwhite" onclick={() => (aboutModal = true)}>About</NavLi>
