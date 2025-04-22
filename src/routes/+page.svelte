@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as api from '$lib/apis';
 	import * as util from '$lib/utils';
+	import { dev } from '$app/environment';
 	import { type LngLatLike, type LngLatBoundsLike } from 'maplibre-gl';
 	import { MapLibre, GeoJSON, LineLayer, Marker } from 'svelte-maplibre';
 	import type { FeatureCollection, LineString } from 'geojson';
@@ -56,7 +57,6 @@
 	const NAVIGATION_ZOOM = 17;
 	const MAX_ZOOM = 18;
 
-	let devMode = true; // enables dragging of position marker and debugging route display
 	let pathGeoJson: FeatureCollection | null = $state(null);
 	let turnInstructions: Array<api.TurnInstruction> = $state([]);
 	let turnDisplayString = $state('');
@@ -211,7 +211,7 @@
 			gpsWatchId = navigator.geolocation.watchPosition(
 				(position: GeolocationPosition) => {
 					// in dev mode, let's ignore the GPS to allow us to drag for simulation
-					if (devMode && currentUserLocation !== undefined) {
+					if (dev && currentUserLocation !== undefined) {
 						return;
 					}
 
@@ -224,7 +224,7 @@
 
 					handleUserLocationChanged(currentUserLocation);
 				},
-				(error) => console.log(error),
+				null, // (error) => console.log(error),
 				options
 			);
 			loadingGps = true;
@@ -652,7 +652,7 @@
 				bind:lngLat={currentUserLocation}
 				rotation={currentUserBearing - cameraState.bearing}
 				class="h-8 w-8"
-				draggable={devMode}
+				draggable={dev}
 				ondragend={() => handleUserLocationChanged(currentUserLocation!)}
 			>
 				<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
