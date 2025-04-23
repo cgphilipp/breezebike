@@ -28,7 +28,7 @@ export async function requestWakeLock() {
 	return null;
 }
 
-export function getBoundsFromPath(path: LineString) {
+export function getBoundsFromPath(path: LineString, paddingPercent: number) {
 	const result: LngLatBoundsLike = [Number.MAX_VALUE, Number.MAX_VALUE, Number.MIN_VALUE, Number.MIN_VALUE];
 	for (const point of path.coordinates) {
 		result[0] = Math.min(result[0], point[0]);
@@ -36,6 +36,12 @@ export function getBoundsFromPath(path: LineString) {
 		result[2] = Math.max(result[2], point[0]);
 		result[3] = Math.max(result[3], point[1]);
 	}
+	const diffX = result[2] - result[0];
+	const diffY = result[3] - result[1];
+	result[0] -= diffX * paddingPercent;
+	result[1] -= diffY * paddingPercent;
+	result[2] += diffX * paddingPercent;
+	result[3] += diffY * paddingPercent;
 	return result;
 }
 

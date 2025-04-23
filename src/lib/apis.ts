@@ -3,6 +3,9 @@ import type { FeatureCollection } from 'geojson';
 import { type LngLatLike } from 'svelte-maplibre';
 import { ParsedGPX, parseGPX } from '@we-gold/gpxjs';
 
+import pkg from 'maplibre-gl';
+const { LngLat } = pkg;
+
 const routeUrl = 'https://bikerouter.de/brouter-engine/brouter';
 const geocoderUrl = 'https://photon.komoot.io/api/';
 
@@ -38,8 +41,8 @@ function readTurnNavigationFromGPX(gpx: ParsedGPX): Array<TurnInstruction> {
 	return result;
 }
 
-export async function geocode(location: string): Promise<LngLatLike | null> {
-	const geojson = await fetchGeocodingAPI(location, 1);
+export async function geocode(location: string, geoLocation: LngLatLike | undefined): Promise<LngLatLike | null> {
+	const geojson = await fetchGeocodingAPI(location, geoLocation, 1);
 
 	for (const feature of geojson.features) {
 		if (feature.geometry.type == 'Point') {
@@ -50,8 +53,8 @@ export async function geocode(location: string): Promise<LngLatLike | null> {
 	return null;
 }
 
-export async function fetchSuggestions(input: string) {
-	const geojson = await fetchGeocodingAPI(input, 5);
+export async function fetchSuggestions(input: string, geoLocation: LngLatLike | undefined) {
+	const geojson = await fetchGeocodingAPI(input, geoLocation, 5);
 
 	const newSuggestions = new Set<Suggestion>();
 	for (const feature of geojson.features) {
@@ -150,8 +153,14 @@ export async function fetchRoutingAPI(from: LngLatLike, to: LngLatLike, profile:
 	};
 }
 
-async function fetchGeocodingAPI(locationString: string, limitElements: number) {
-	const response = await fetch(`${geocoderUrl}?q=${locationString}&limit=${limitElements}`);
+async function fetchGeocodingAPI(locationString: string, geoLocation: LngLatLike | undefined, limitElements: number) {
+	let geolocationPriorityString = "";
+	if (geoLocation !== undefined) {
+		const location = LngLat.convert(geoLocation);
+		geolocationPriorityString = `&lat=${location.lat}&lon=${location.lng}`;
+	}
+
+	const response = await fetch(`${geocoderUrl}?q=${locationString}&limit=${limitElements}${geolocationPriorityString}`);
 	if (!response.ok) {
 		throw new Error(response.statusText);
 	}

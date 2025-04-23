@@ -155,10 +155,10 @@
 		console.log(`Routing from ${fromInput.input} to ${toInput.input}...`);
 
 		if (fromInput.location === null) {
-			fromInput.location = await api.geocode(fromInput.input);
+			fromInput.location = await api.geocode(fromInput.input, currentUserLocation);
 		}
 		if (toInput.location === null) {
-			toInput.location = await api.geocode(toInput.input);
+			toInput.location = await api.geocode(toInput.input, currentUserLocation);
 		}
 
 		if (!fromInput.location) {
@@ -184,12 +184,13 @@
 				pathGeoJson = response.geojson;
 				turnInstructions = response.turnInstructions;
 				if (pathGeoJson.features.length > 0) {
-					let geometry = pathGeoJson.features[0].geometry;
+					const geometry = pathGeoJson.features[0].geometry;
 					if (geometry.type !== 'LineString') {
 						return;
 					}
-					let lineString = geometry as LineString;
-					currentBounds = util.getBoundsFromPath(lineString);
+					const lineString = geometry as LineString;
+					const boundsPaddingPercent = 0.2;
+					currentBounds = util.getBoundsFromPath(lineString, boundsPaddingPercent);
 					console.log(`Setting bounds to ${currentBounds}`);
 
 					loadingRoute = false;
@@ -317,7 +318,7 @@
 		console.log(`Querying from suggestion, input: ${fromInput.input}`);
 
 		fromInput.loadingSuggestion = true;
-		let suggestions = await api.fetchSuggestions(fromInput.input);
+		let suggestions = await api.fetchSuggestions(fromInput.input, currentUserLocation);
 		fromInput.suggestions = Array.from(suggestions.values());
 		fromInput.loadingSuggestion = false;
 	}
@@ -326,7 +327,7 @@
 		console.log(`Querying to suggestion, input: ${toInput.input}`);
 
 		toInput.loadingSuggestion = true;
-		let suggestions = await api.fetchSuggestions(toInput.input);
+		let suggestions = await api.fetchSuggestions(toInput.input, currentUserLocation);
 		toInput.suggestions = Array.from(suggestions.values());
 		toInput.loadingSuggestion = false;
 	}
