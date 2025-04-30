@@ -1,10 +1,5 @@
 <script lang="ts">
-	import * as api from '$lib/apis';
-	import * as util from '$lib/utils';
-	import { dev } from '$app/environment';
-	import { type LngLatLike, type LngLatBoundsLike } from 'maplibre-gl';
 	import { MapLibre, GeoJSON, LineLayer, Marker } from 'svelte-maplibre';
-	import type { FeatureCollection, LineString } from 'geojson';
 	import {
 		Button,
 		Spinner,
@@ -17,353 +12,55 @@
 		Modal
 	} from 'flowbite-svelte';
 
-	type InputField = {
-		input: string;
-		focused: boolean;
-		loadingSuggestion: boolean;
-		location: LngLatLike | null; // not null if cached from autocompletion / current user geo location
-		suggestions: Array<api.Suggestion>;
-	};
-	type CameraState = {
-		center: LngLatLike;
-		zoom: number;
-		bearing: number;
-		pitch: number;
-	};
-	let cameraState: CameraState = $state({
-		center: [10.840601938197864, 49.971698275409054],
-		zoom: 5,
-		bearing: 0,
-		pitch: 0
-	});
+	// State & Constants (using $state and writable stores)
+	import {
+		cameraState, // $state
+		fromInput, // $state
+		toInput, // $state
+		turnInstructions, // $state
+		appState, // writable
+		currentRoutingProfile, // writable
+		aboutModal, // writable
+		profileChooseModal, // writable
+		pathGeoJson, // writable
+		turnDisplayString, // writable
+		turnDisplayIconName, // writable
+		currentBounds, // writable
+		currentUserLocation, // writable
+		currentUserBearing, // writable
+		loadingRoute, // writable
+		loadingGps, // writable
+		colors, // const
+		MAX_ZOOM // const
+	} from '$lib/navigationState.svelte';
 
-	type AppState = 'SearchingRoute' | 'DisplayingRoute' | 'Routing' | 'FinishedRouting';
-	let appState: AppState = $state('SearchingRoute');
+	// Logic Functions
+	import {
+		handleUserLocationChanged,
+		calculateRoute,
+		toHomeScreen,
+		startRouting,
+		queryFromGeoposition,
+		queryToGeoposition,
+		queryFromSuggestions,
+		queryToSuggestions,
+		applyFromSuggestion,
+		applyToSuggestion,
+		handleFromFocus,
+		handleToFocus
+	} from '$lib/navigationLogic';
 
-	let currentRoutingProfile: api.RoutingProfile | undefined = $state(undefined);
-	let aboutModal = $state(false);
-	let profileChooseModal = $state(true);
+	// Helpers
+	import * as util from '$lib/utils';
+	import { dev } from '$app/environment'; // Import dev environment flag
 
-	let wakeLock: WakeLockSentinel | null = null;
-
-	let colors = {
-		primary: '#F34213',
-		primaryLight: '#E0CA3C',
-		secondary: '#3E2F5B',
-		green: '#136F63',
-		black: '#000F08',
-		offwhite: '#EEEEEE'
-	};
-	const DEFAULT_ZOOM = 12;
-	const NAVIGATION_ZOOM = 17;
-	const MAX_ZOOM = 18;
-
-	let pathGeoJson: FeatureCollection | null = $state(null);
-	let turnInstructions: Array<api.TurnInstruction> = $state([]);
-	let turnDisplayString = $state('');
-	let turnDisplayIconName = $state('');
-	let currentBounds: LngLatBoundsLike | undefined = $state(undefined);
-	let currentUserLocation: LngLatLike | undefined = $state(undefined);
-	let currentUserBearing: number = $state(0);
-
-	let gpsWatchId: number | null = null;
-
-	let fromInput: InputField = $state({
-		input: '',
-		focused: false,
-		loadingSuggestion: false,
-		location: null,
-		suggestions: []
-	});
-
-	let toInput: InputField = $state({
-		input: '',
-		focused: false,
-		loadingSuggestion: false,
-		location: null,
-		suggestions: []
-	});
-
-	let loadingRoute = $state(false);
-	let loadingGps = $state(false);
-
-	function handleUserLocationChanged(location: LngLatLike) {
-		if (appState !== 'Routing' && appState !== 'FinishedRouting') {
-			return;
-		}
-
-		// todo: provide ability to go into "custom" camera mode while navigating
-		cameraState.center = location;
-
-		if (appState !== 'Routing') {
-			return;
-		}
-
-		let targetId = api.determineCurrentWaypointId(location, turnInstructions);
-		let currentTurnInstruction = turnInstructions[targetId];
-		let distanceMeters = util.distanceMeter(location, currentTurnInstruction.coordinate);
-		switch (currentTurnInstruction.instruction) {
-			case 'straight':
-				turnDisplayIconName = 'arrow-narrow-up';
-				break;
-			case 'right':
-				turnDisplayIconName = 'corner-up-right';
-				break;
-			case 'left':
-				turnDisplayIconName = 'corner-up-left';
-				break;
-			case 'keep right':
-			case 'slight right':
-				turnDisplayIconName = 'arrow-bear-right';
-				break;
-			case 'keep left':
-			case 'slight left':
-				turnDisplayIconName = 'arrow-bear-left';
-				break;
-			case 'sharp right':
-				turnDisplayIconName = 'arrow-sharp-turn-right';
-				break;
-			case 'sharp left':
-				turnDisplayIconName = 'arrow-sharp-turn-left';
-				break;
-			default:
-				turnDisplayIconName = '';
-		}
-
-		let displayDistance = util.roundRemainingDistance(distanceMeters);
-		if (turnDisplayIconName === '') {
-			turnDisplayString = currentTurnInstruction.instruction + ' in ' + displayDistance + 'm';
-		} else {
-			turnDisplayString = displayDistance + 'm';
-		}
-
-		if (targetId > 0) {
-			let lastTurnInstruction = turnInstructions[targetId - 1];
-			cameraState.bearing = util.calculateBearing(
-				lastTurnInstruction.coordinate,
-				currentTurnInstruction.coordinate
-			);
-		}
-
-		// hacky :)
-		if (currentTurnInstruction.instruction === 'Destination' && distanceMeters < 10) {
-			finishRouting();
-		}
-	}
-
-	async function calculateRoute() {
-		console.log(`Routing from ${fromInput.input} to ${toInput.input}...`);
-
-		if (fromInput.location === null) {
-			fromInput.location = await api.geocode(fromInput.input, currentUserLocation);
-		}
-		if (toInput.location === null) {
-			toInput.location = await api.geocode(toInput.input, currentUserLocation);
-		}
-
-		if (!fromInput.location) {
-			alert(`Could not find coords for ${fromInput.input}`);
-			return;
-		}
-		if (!toInput.location) {
-			alert(`Could not find coords for ${toInput.input}`);
-			return;
-		}
-
-		if (currentRoutingProfile === undefined) {
-			alert(`Please select a routing profile.`);
-			return;
-		}
-
-		console.log(`Fetched coords ${fromInput.location} -> ${toInput.location}`);
-		loadingRoute = true;
-
-		api
-			.fetchRoutingAPI(fromInput.location, toInput.location, currentRoutingProfile)
-			.then((response) => {
-				pathGeoJson = response.geojson;
-				turnInstructions = response.turnInstructions;
-				if (pathGeoJson.features.length > 0) {
-					const geometry = pathGeoJson.features[0].geometry;
-					if (geometry.type !== 'LineString') {
-						return;
-					}
-					const lineString = geometry as LineString;
-					const boundsPaddingPercent = 0.2;
-					currentBounds = util.getBoundsFromPath(lineString, boundsPaddingPercent);
-					console.log(`Setting bounds to ${currentBounds}`);
-
-					loadingRoute = false;
-					appState = 'DisplayingRoute';
-				}
-			});
-	}
-
-	function setupGeolocationWatch() {
-		if (gpsWatchId !== null) {
-			return;
-		}
-
-		if (navigator.geolocation) {
-			let options: PositionOptions = {
-				enableHighAccuracy: true,
-				maximumAge: 0,
-				timeout: 1000
-			};
-			gpsWatchId = navigator.geolocation.watchPosition(
-				(position: GeolocationPosition) => {
-					// in dev mode, let's ignore the GPS to allow us to drag for simulation
-					if (dev && currentUserLocation !== undefined) {
-						return;
-					}
-
-					loadingGps = false;
-
-					currentUserLocation = [position.coords.longitude, position.coords.latitude];
-					if (position.coords.heading !== null) {
-						currentUserBearing = position.coords.heading;
-					}
-
-					handleUserLocationChanged(currentUserLocation);
-				},
-				null, // (error) => console.log(error),
-				options
-			);
-			loadingGps = true;
-		}
-	}
-
-	function toHomeScreen() {
-		appState = 'SearchingRoute';
-
-		if (currentUserLocation !== undefined) {
-			cameraState.center = currentUserLocation;
-		}
-		cameraState.zoom = DEFAULT_ZOOM;
-		cameraState.bearing = 0;
-		cameraState.pitch = 0;
-
-		fromInput = {
-			input: '',
-			focused: false,
-			loadingSuggestion: false,
-			location: null,
-			suggestions: []
-		};
-		toInput = {
-			input: '',
-			focused: false,
-			loadingSuggestion: false,
-			location: null,
-			suggestions: []
-		};
-
-		if (wakeLock !== null) {
-			wakeLock.release().then(() => (wakeLock = null));
-		}
-	}
-
-	function startRouting() {
-		setupGeolocationWatch();
-		if (wakeLock === null) {
-			util.requestWakeLock().then((wl) => (wakeLock = wl));
-		}
-
-		appState = 'Routing';
-		if (currentUserLocation !== undefined) {
-			cameraState.center = currentUserLocation;
-		}
-
-		cameraState.zoom = NAVIGATION_ZOOM;
-		cameraState.pitch = 30;
-		if (currentUserLocation !== undefined) {
-			cameraState.center = currentUserLocation;
-			handleUserLocationChanged(currentUserLocation); // update turn-by-turn, bearing, ...
-		}
-	}
-
-	function finishRouting() {
-		appState = 'FinishedRouting';
-		turnInstructions = [];
-		pathGeoJson = null;
-
-		cameraState.zoom = NAVIGATION_ZOOM;
-		cameraState.bearing = 0;
-		cameraState.pitch = 0;
-	}
-
-	function queryFromGeoposition() {
-		setupGeolocationWatch();
-
-		if (currentUserLocation === undefined) {
-			setTimeout(queryFromGeoposition, 100);
-			return;
-		}
-		fromInput.input = currentUserLocation.toString();
-		fromInput.location = currentUserLocation;
-	}
-
-	function queryToGeoposition() {
-		setupGeolocationWatch();
-
-		if (currentUserLocation === undefined) {
-			setTimeout(queryToGeoposition, 100);
-			return;
-		}
-		toInput.input = currentUserLocation.toString();
-		toInput.location = currentUserLocation;
-	}
-
-	async function queryFromSuggestions() {
-		console.log(`Querying from suggestion, input: ${fromInput.input}`);
-
-		fromInput.loadingSuggestion = true;
-		let suggestions = await api.fetchSuggestions(fromInput.input, currentUserLocation);
-		fromInput.suggestions = Array.from(suggestions.values());
-		fromInput.loadingSuggestion = false;
-	}
-
-	async function queryToSuggestions() {
-		console.log(`Querying to suggestion, input: ${toInput.input}`);
-
-		toInput.loadingSuggestion = true;
-		let suggestions = await api.fetchSuggestions(toInput.input, currentUserLocation);
-		toInput.suggestions = Array.from(suggestions.values());
-		toInput.loadingSuggestion = false;
-	}
-
-	function applyFromSuggestion(suggestion: api.Suggestion) {
-		console.log(`Applying from suggestion: ${suggestion}`);
-		fromInput.input = suggestion[0];
-		fromInput.location = suggestion[1];
-		fromInput.focused = false;
-		fromInput.suggestions = [];
-	}
-
-	function applyToSuggestion(suggestion: api.Suggestion) {
-		console.log(`Applying to suggestion: ${suggestion}`);
-		toInput.input = suggestion[0];
-		toInput.location = suggestion[1];
-		toInput.focused = false;
-		toInput.suggestions = [];
-	}
-
-	function handleFromFocus() {
-		fromInput.focused = true;
-		toInput.focused = false;
-	}
-
-	function handleToFocus() {
-		toInput.focused = true;
-		fromInput.focused = false;
-	}
-
-	let mainContainerWidth = 'sm:w-full md:w-1/2 lg:w-1/3';
-	let mainContainerClasses =
+	// Local component constants
+	const mainContainerWidth = 'sm:w-full md:w-1/2 lg:w-1/3';
+	const mainContainerClasses =
 		mainContainerWidth + ' bg-faded-white backdrop-blur-sm pointer-events-auto p-2 flex rounded-lg';
 </script>
 
-<Modal title="About" class="z-2" bind:open={aboutModal} autoclose>
+<Modal title="About" class="z-2" bind:open={$aboutModal} autoclose>
 	<p class="text-base leading-relaxed text-gray-500 dark:text-gray-400">
 		<b>breezebike</b> is a modern bike navigation frontend based on the
 		<a href="https://brouter.de" class="text-blue-500">BRouter</a> bike routing service. Also check
@@ -389,42 +86,42 @@
 	</p>
 </Modal>
 
-<Modal bind:open={profileChooseModal}>
+<Modal bind:open={$profileChooseModal}>
 	<p class="text-offblack mb-4">Select your profile:</p>
 	<div class="grid w-full grid-cols-2 gap-2 text-center">
 		<Button
 			class="bg-secondary h-16"
 			onclick={() => {
-				currentRoutingProfile = 'Trekking';
-				profileChooseModal = false;
+				currentRoutingProfile.set('Trekking');
+				profileChooseModal.set(false);
 			}}>Trekking</Button
 		>
 		<Button
 			class="bg-secondary h-16"
 			onclick={() => {
-				currentRoutingProfile = 'Road bike';
-				profileChooseModal = false;
+				currentRoutingProfile.set('Road bike');
+				profileChooseModal.set(false);
 			}}>Road bike</Button
 		>
 		<Button
 			class="bg-secondary h-16"
 			onclick={() => {
-				currentRoutingProfile = 'Gravel';
-				profileChooseModal = false;
+				currentRoutingProfile.set('Gravel');
+				profileChooseModal.set(false);
 			}}>Gravel</Button
 		>
 		<Button
 			class="bg-secondary h-16"
 			onclick={() => {
-				currentRoutingProfile = 'Mountainbike';
-				profileChooseModal = false;
+				currentRoutingProfile.set('Mountainbike');
+				profileChooseModal.set(false);
 			}}>MTB</Button
 		>
 	</div>
 </Modal>
 
 <div class="h-screen w-screen">
-	{#if loadingRoute || loadingGps}
+	{#if $loadingRoute || $loadingGps}
 		<div
 			class="pointer-events-none absolute z-1 flex h-screen w-screen items-center justify-center"
 		>
@@ -433,7 +130,7 @@
 	{/if}
 
 	<div class="pointer-events-none absolute z-1 h-screen w-screen">
-		{#if appState !== 'Routing'}
+		{#if $appState !== 'Routing'}
 			<Navbar class="bg-secondary text-offwhite pointer-events-auto" fluid={true}>
 				<NavBrand href="/">
 					<div class="flex gap-2">
@@ -465,15 +162,15 @@
 				<NavUl
 					ulClass="bg-secondary flex flex-col p-4 mt-4 md:flex-row md:space-x-8 rtl:space-x-reverse md:mt-0 md:text-sm md:font-medium"
 				>
-					<NavLi href="#" class="text-offwhite" onclick={() => (profileChooseModal = true)}>
-						Routing profile: {currentRoutingProfile ? currentRoutingProfile : 'None'}
+					<NavLi href="#" class="text-offwhite" onclick={() => profileChooseModal.set(true)}>
+						Routing profile: {$currentRoutingProfile ? $currentRoutingProfile : 'None'}
 					</NavLi>
-					<NavLi href="#" class="text-offwhite" onclick={() => (aboutModal = true)}>About</NavLi>
+					<NavLi href="#" class="text-offwhite" onclick={() => aboutModal.set(true)}>About</NavLi>
 				</NavUl>
 			</Navbar>
 		{/if}
 
-		{#if appState === 'SearchingRoute'}
+		{#if $appState === 'SearchingRoute'}
 			<div class={mainContainerClasses}>
 				<form class="flex w-full flex-col gap-1">
 					<div class="flex flex-row gap-1">
@@ -522,12 +219,9 @@
 						</Button>
 					</div>
 
-					<Input
-						class="bg-primary text-offwhite"
-						onclick={calculateRoute}
-						type="submit"
-						value="Find Route"
-					/>
+					<Button class="bg-primary text-offwhite" on:click={calculateRoute} type="button"
+						>Find Route</Button
+					><!-- Changed type to button to prevent default form submission -->
 				</form>
 			</div>
 
@@ -574,7 +268,7 @@
 			{/if}
 		{/if}
 
-		{#if appState === 'DisplayingRoute'}
+		{#if $appState === 'DisplayingRoute'}
 			<div class={mainContainerClasses}>
 				<div class="flex w-full flex-row gap-1">
 					<Button class="bg-primary h-12 w-12 p-3" onclick={toHomeScreen}>
@@ -603,21 +297,21 @@
 			<div class={mainContainerClasses + ' absolute bottom-1'}>Stats coming soon!</div>
 		{/if}
 
-		{#if appState === 'Routing'}
-			{#if turnDisplayIconName !== '' || turnDisplayString !== ''}
+		{#if $appState === 'Routing'}
+			{#if $turnDisplayIconName !== '' || $turnDisplayString !== ''}
 				<div class={mainContainerClasses + ' items-center justify-center pt-5 pb-5 text-xl'}>
 					<div class="flex flex-col items-center gap-2">
-						{#if turnDisplayIconName !== ''}
+						{#if $turnDisplayIconName !== ''}
 							<div class="h-20 w-20">
 								<img
 									class="h-full w-full"
-									src="/navigation-icons/{turnDisplayIconName}.svg"
+									src="/navigation-icons/{$turnDisplayIconName}.svg"
 									alt="turn navigation icon"
 								/>
 							</div>
 						{/if}
 						<div class="text-xl">
-							{turnDisplayString}
+							{$turnDisplayString}
 						</div>
 					</div>
 				</div>
@@ -645,7 +339,7 @@
 			</Button>
 		{/if}
 
-		{#if appState === 'FinishedRouting'}
+		{#if $appState === 'FinishedRouting'}
 			<div class={mainContainerClasses}>
 				<div class="flex w-full flex-col gap-1">
 					<Button class="bg-primary" onclick={toHomeScreen}>Start new navigation</Button>
@@ -664,11 +358,11 @@
 		bearing={cameraState.bearing}
 		pitch={cameraState.pitch}
 		pitchWithRotate={false}
-		bounds={currentBounds}
+		bounds={$currentBounds}
 		maxZoom={MAX_ZOOM}
 	>
-		{#if pathGeoJson}
-			<GeoJSON data={pathGeoJson!}>
+		{#if $pathGeoJson}
+			<GeoJSON data={$pathGeoJson!}>
 				<LineLayer
 					layout={{ 'line-cap': 'round', 'line-join': 'round' }}
 					paint={{ 'line-color': colors.primary, 'line-width': 3 }}
@@ -677,13 +371,13 @@
 			</GeoJSON>
 		{/if}
 
-		{#if currentUserLocation}
+		{#if $currentUserLocation}
 			<Marker
-				bind:lngLat={currentUserLocation}
-				rotation={currentUserBearing - cameraState.bearing}
+				bind:lngLat={$currentUserLocation}
+				rotation={$currentUserBearing - cameraState.bearing}
 				class="h-8 w-8"
 				draggable={dev}
-				ondragend={() => handleUserLocationChanged(currentUserLocation!)}
+				ondragend={() => handleUserLocationChanged($currentUserLocation!)}
 			>
 				<svg width="100%" height="100%" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
 					<polygon points="50,15 80,80 50,65 20,80" fill={colors.secondary} />

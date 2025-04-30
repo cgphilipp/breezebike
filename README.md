@@ -40,6 +40,4 @@ https://tabler.io/icons
 - display stats for the fetched route (distance, time, elevation)
 - advanced brouter profile settings (within a dedicated settings modal?)
 - offer multiple alternative routes
-- improvements on auto complete
-  - use photons API for biasing towards user location (may need to query location on app start)
 - let user add stops on the way (brouter already supports it)
