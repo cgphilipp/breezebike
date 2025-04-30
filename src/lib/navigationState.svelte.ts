@@ -27,6 +27,7 @@ export type AppState = "SearchingRoute" | "DisplayingRoute" | "Routing" | "Finis
 export const DEFAULT_ZOOM = 12;
 export const NAVIGATION_ZOOM = 17;
 export const MAX_ZOOM = 18;
+export const OFF_PATH_THRESHOLD_METERS = 50; // Threshold in meters
 export const colors = {
     primary: '#F34213',
     primaryLight: '#E0CA3C',
@@ -80,3 +81,4 @@ export const currentUserBearing = writable(0);
 export const gpsWatchId = writable<number | null>(null);
 export const loadingRoute = writable(false);
 export const loadingGps = writable(false);
+export const isOffPath = writable(false); // NEW: State to track if user is off path

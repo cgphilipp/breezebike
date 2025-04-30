@@ -158,3 +158,27 @@ export function roundRemainingDistance(distance: number) {
 	const roundToMax = 100;
 	return distance - (distance % roundToMax);
 }
+
+/**
+ * Calculates the minimum distance (using Haversine formula) from a point
+ * to any of the vertices in a LineString geometry.
+ *
+ * @param point The point (LngLatLike).
+ * @param line The LineString geometry.
+ * @returns The minimum distance in meters, or Infinity if the line has no coordinates.
+ */
+export function distanceToLineStringVertices(point: LngLatLike, line: LineString): number {
+	if (!line || !line.coordinates || line.coordinates.length === 0) {
+		return Infinity;
+	}
+
+	let minDistance = Infinity;
+	for (const vertex of line.coordinates) {
+		// Cast vertex to LngLatLike to satisfy distanceMeter's type requirement
+		const dist = distanceMeter(point, vertex as LngLatLike);
+		if (dist < minDistance) {
+			minDistance = dist;
+		}
+	}
+	return minDistance;
+}

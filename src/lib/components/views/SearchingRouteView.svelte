@@ -1,10 +1,6 @@
 <script lang="ts">
 	import { Button, Input } from 'flowbite-svelte';
-
-	// State & Constants
 	import { fromInput, toInput } from '$lib/navigationState.svelte';
-
-	// Logic Functions
 	import {
 		calculateRoute,
 		queryFromGeoposition,
@@ -17,10 +13,8 @@
 		handleToFocus
 	} from '$lib/navigationLogic';
 
-	// Helpers
 	import * as util from '$lib/utils';
 
-	// Local component constants
 	const mainContainerWidth = 'sm:w-full md:w-1/2 lg:w-1/3';
 	const mainContainerClasses =
 		mainContainerWidth + ' bg-faded-white backdrop-blur-sm pointer-events-auto p-2 flex rounded-lg';

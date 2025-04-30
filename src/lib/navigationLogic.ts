@@ -1,9 +1,9 @@
 import * as api from '$lib/apis';
 import * as util from '$lib/utils';
-import { dev } from "$app/environment";
-import { type LngLatLike } from "maplibre-gl";
-import type { LineString } from "geojson";
-import { get } from "svelte/store";
+import { dev } from '$app/environment';
+import { type LngLatLike } from 'maplibre-gl';
+import type { LineString } from 'geojson'; // Removed FeatureCollection
+import { get } from 'svelte/store';
 import {
     appState, // writable
     cameraState, // $state
@@ -21,9 +21,11 @@ import {
     gpsWatchId, // writable
     loadingGps, // writable
     wakeLock, // writable
+    isOffPath, // writable - NEW
+    OFF_PATH_THRESHOLD_METERS, // constant - NEW
     DEFAULT_ZOOM,
-    NAVIGATION_ZOOM,
-} from "./navigationState.svelte";
+    NAVIGATION_ZOOM
+} from './navigationState.svelte';
 
 export function handleUserLocationChanged(location: LngLatLike) {
     const currentAppState = get(appState);
@@ -34,9 +36,25 @@ export function handleUserLocationChanged(location: LngLatLike) {
     // todo: provide ability to go into "custom" camera mode while navigating
     cameraState.center = location; // $state object property mutation is fine
 
-    if (currentAppState !== "Routing") {
+    if (currentAppState !== 'Routing') {
         return;
     }
+
+    // --- Off-path check ---
+    const currentPathGeoJson = get(pathGeoJson);
+    if (currentPathGeoJson && currentPathGeoJson.features.length > 0) {
+        const routeGeometry = currentPathGeoJson.features[0].geometry;
+        if (routeGeometry.type === 'LineString') {
+            const distanceOffPath = util.distanceToLineStringVertices(location, routeGeometry as LineString);
+            const isCurrentlyOffPath = distanceOffPath > OFF_PATH_THRESHOLD_METERS;
+            if (get(isOffPath) !== isCurrentlyOffPath) {
+                isOffPath.set(isCurrentlyOffPath); // Update state only if it changes
+                console.log(`User is ${isCurrentlyOffPath ? 'OFF' : 'ON'} path (Distance: ${distanceOffPath}m)`);
+            }
+        }
+    }
+    // --- End Off-path check ---
+
 
     // turnInstructions is $state, direct access is fine
     const targetId = api.determineCurrentWaypointId(location, turnInstructions);
@@ -391,4 +409,36 @@ export function handleFromFocus() {
 export function handleToFocus() {
     toInput.focused = true;
     fromInput.focused = false; // Ensure other input loses focus
+}
+
+/**
+ * Recalculates the route starting from the user's current location.
+ * Updates the 'from' input and triggers the standard route calculation.
+ * Resets the 'isOffPath' flag.
+ */
+export async function recalculateRouteFromCurrentLocation() {
+    if (get(appState) !== "Routing") {
+        return;
+    }
+
+    console.log('Recalculating route from current location...');
+    const currentLocation = get(currentUserLocation);
+
+    if (!currentLocation) {
+        alert('Cannot recalculate route: Current location unknown.');
+        // Optionally, try to query geoposition again?
+        // queryFromGeoposition(); // This might show an alert if it fails too
+        return;
+    }
+
+    // Update the 'from' input to the current location
+    fromInput.input = 'Current Location'; // $state mutation
+    fromInput.location = currentLocation; // $state mutation
+    fromInput.suggestions = []; // $state mutation
+    fromInput.focused = false; // $state mutation
+
+    isOffPath.set(false);
+
+    await calculateRoute();
+    startRouting();
 }

@@ -1,4 +1,3 @@
 - this is a SvelteKit fullstack typescript project, using Svelte 5
 - ONLY use typescript
 - ONLY use Svelte 5 features where applicable, AVOID Svelte 4
-- SvelteKit files using typescript have the suffix .svelte.ts

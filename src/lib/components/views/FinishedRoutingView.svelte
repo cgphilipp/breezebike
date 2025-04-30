@@ -1,10 +1,7 @@
 <script lang="ts">
 	import { Button } from 'flowbite-svelte';
-
-	// Logic Functions
 	import { toHomeScreen } from '$lib/navigationLogic';
 
-	// Local component constants
 	const mainContainerWidth = 'sm:w-full md:w-1/2 lg:w-1/3';
 	const mainContainerClasses =
 		mainContainerWidth + ' bg-faded-white backdrop-blur-sm pointer-events-auto p-2 flex rounded-lg';
