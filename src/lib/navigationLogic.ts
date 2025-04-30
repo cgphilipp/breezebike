@@ -170,37 +170,27 @@ export function setupGeolocationWatch() {
         };
         const watchId = navigator.geolocation.watchPosition(
             (position: GeolocationPosition) => {
-                const location = get(currentUserLocation); // Read store value
+                const location = get(currentUserLocation);
                 // in dev mode, let's ignore the GPS to allow us to drag for simulation
                 if (dev && location !== undefined) {
                     return;
                 }
 
-                loadingGps.set(false); // Use .set()
+                loadingGps.set(false);
 
                 const newLocation: LngLatLike = [position.coords.longitude, position.coords.latitude];
-                currentUserLocation.set(newLocation); // Use .set()
+                currentUserLocation.set(newLocation);
                 if (position.coords.heading !== null) {
-                    currentUserBearing.set(position.coords.heading); // Use .set()
+                    currentUserBearing.set(position.coords.heading);
                 }
 
                 handleUserLocationChanged(newLocation); // Pass the actual value
             },
-            (error) => {
-                console.error("Geolocation error:", error);
-                loadingGps.set(false); // Use .set()
-                alert(`Geolocation error: ${error.message}`);
-                // Optionally stop watching if there's an error?
-                const currentWatchId = get(gpsWatchId);
-                if (currentWatchId !== null) {
-                    navigator.geolocation.clearWatch(currentWatchId);
-                    gpsWatchId.set(null); // Use .set()
-                }
-            },
+            undefined,
             options,
         );
-        gpsWatchId.set(watchId); // Use .set()
-        loadingGps.set(true); // Use .set()
+        gpsWatchId.set(watchId);
+        loadingGps.set(true);
     } else {
         alert("Geolocation is not supported by this browser.");
     }
@@ -309,7 +299,6 @@ export function queryFromGeoposition() {
         }
         return;
     }
-    // fromInput is $state, direct property mutation is fine
     fromInput.input = "Current Location"; // Use a placeholder text
     fromInput.location = location; // Assign the read value
     fromInput.suggestions = []; // Clear suggestions
@@ -328,7 +317,6 @@ export function queryToGeoposition() {
         }
         return;
     }
-    // toInput is $state, direct property mutation is fine
     toInput.input = "Current Location"; // Use a placeholder text
     toInput.location = location; // Assign the read value
     toInput.suggestions = []; // Clear suggestions
@@ -350,7 +338,7 @@ export async function queryFromSuggestions() {
         // fromInput is $state, direct property mutation is fine
         fromInput.suggestions = Array.from(suggestions.values());
     } catch (error) {
-        console.error("Error fetching 'from' suggestions:", error);
+        console.error("Error while fetching suggestions:", error);
         fromInput.suggestions = []; // Clear suggestions on error
     } finally {
         fromInput.loadingSuggestion = false;
@@ -372,7 +360,7 @@ export async function queryToSuggestions() {
         // toInput is $state, direct property mutation is fine
         toInput.suggestions = Array.from(suggestions.values());
     } catch (error) {
-        console.error("Error fetching 'to' suggestions:", error);
+        console.error("Error while fetching suggestions:", error);
         toInput.suggestions = []; // Clear suggestions on error
     } finally {
         toInput.loadingSuggestion = false;
